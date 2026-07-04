@@ -258,26 +258,58 @@ kernel wait channel) so you can tell a GPU/driver hang (render thread blocked in
 an ioctl/fence) from a guest‑side deadlock (thread spinning / parked on a futex).
 
 ### GFXReconstruct capture (for driver developers)
-To record a Vulkan trace to send to Turnip/Mesa maintainers, create an empty
-file `gfxrecon_capture.txt` in `driver_import/`. The build enables the
-GFXReconstruct capture layer (bundle
-`libVkLayer_gfxreconstruct.so` in `jniLibs/` — download from
-[LunarG/gfxreconstruct](https://github.com/LunarG/gfxreconstruct) Android
-release; it is **not** committed here) and writes to `../gfxr/`.
 
-Notes learned the hard way:
-- The prebuilt LunarG layer (≤ SDK 1.4.309) configures **only** via Android
-  system properties (`debug.gfxrecon.*`, i.e. needs `adb setprop`) and its
-  `VkLayerSettingsCreateInfoEXT` support is incomplete; its segments are also
-  **4 KB‑aligned**, which **Android 16 refuses to load** (the "app doesn't
-  support 16 KB pages" dialog). For an adb‑free, launcher‑startable capture on a
-  remote device you need a **16 KB‑aligned build from source** (modern NDK) with
-  working `VK_EXT_layer_settings`.
-- With adb on a dev device you can capture with the prebuilt layer:
-  `adb shell setprop debug.gfxrecon.capture_file <app‑writable path>` (⚠️ prop
-  value max **92 bytes** — use a short filename), launch via `am`/`monkey` (this
-  bypasses the 16 KB dialog), and use
-  `debug.gfxrecon.capture_android_trigger true/false` to trim.
+The app has an opt-in path to record a Vulkan API trace (`.gfxr`) to send to
+Turnip / Mesa maintainers. It is **off by default**: no capture layer is
+committed here, there is no build dependency on it, and nothing runs unless you
+enable it. The app-side hook lives in `thirdparty/plume/plume_vulkan.cpp` and
+`os/android/vulkan_driver_android.cpp` (`ApplyGfxreconstructCapture`): on launch,
+**if the file `driver_import/gfxrecon_capture.txt` exists**, the app enables the
+`VK_LAYER_LUNARG_gfxreconstruct` layer (when the layer `.so` is present) and
+passes the capture settings via `VK_EXT_layer_settings`.
+
+So you always need two things: the layer `.so` in the APK, and the marker file on
+the device. The catch: that marker-only flow relies on `VK_EXT_layer_settings`,
+which the **prebuilt** LunarG layer does NOT honor, and that prebuilt is
+4 KB-aligned so Android 16 won't even load it. Pick one of the two paths below.
+
+**Path A — quick capture on a device you control (you have adb).** What was used
+to produce the a725 traces; works with the stock prebuilt layer.
+
+1. Download the [LunarG/gfxreconstruct](https://github.com/LunarG/gfxreconstruct)
+   Android release and copy `arm64-v8a/libVkLayer_gfxreconstruct.so` into
+   `android-apk/app/src/main/jniLibs/arm64-v8a/`, then build the APK.
+2. Create the marker `gfxrecon_capture.txt` in `driver_import/` (makes the app
+   load the layer and create the `gfxr/` output folder).
+3. Configure the layer with system properties (the prebuilt layer ignores the
+   app-supplied `VK_EXT_layer_settings`, so it must be told the path this way):
+   ```
+   adb shell setprop debug.gfxrecon.capture_file /storage/emulated/0/Android/data/org.libsdl.app/files/gfxr/cap.gfxr
+   adb shell setprop debug.gfxrecon.capture_compression_type LZ4
+   ```
+   ⚠️ The property VALUE is capped at **92 bytes** — use a short path/filename.
+4. Launch with:
+   ```
+   adb shell monkey -p org.libsdl.app -c android.intent.category.LAUNCHER 1
+   ```
+   Starting via `monkey`/`am` **bypasses** Android 16's "app doesn't support
+   16 KB pages" dialog that would otherwise block a launcher start (the prebuilt
+   layer is 4 KB-aligned).
+5. Optional, for a small file — trim instead of a full capture: set
+   `debug.gfxrecon.capture_android_trigger false` before launch, then once you
+   are at the repro scene toggle it `true` for a few seconds and back to `false`.
+6. `adb pull` the `.gfxr` from `.../files/gfxr/`.
+
+**Path B — adb-free capture (e.g. a remote tester with no adb).** Path A's
+`setprop` and `monkey` steps are impossible without adb, and the launcher is
+blocked by the 16 KB dialog. For this you must **build the gfxreconstruct layer
+from source** with a modern NDK so it is (a) **16 KB-aligned** (Android 15/16
+loads it, launcher start works) and (b) honors **`VK_EXT_layer_settings`** (recent
+gfxreconstruct `dev`). Then the marker-file flow works with no adb: the app passes
+the output path via `VK_EXT_layer_settings`, and the tester just drops
+`gfxrecon_capture.txt`, plays to the repro spot, closes the game, and sends
+`files/gfxr/*.gfxr`. (This source build was not needed for our own testing, so it
+is not included here.)
 
 ---
 
