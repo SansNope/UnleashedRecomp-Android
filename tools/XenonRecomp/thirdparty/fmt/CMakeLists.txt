@@ -37,10 +37,10 @@ function(enable_module target)
 endfunction()
 
 set(FMT_USE_CMAKE_MODULES FALSE)
-if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.28 AND
-    CMAKE_GENERATOR STREQUAL "Ninja")
-  set(FMT_USE_CMAKE_MODULES TRUE)
-endif ()
+# if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.28 AND
+#    CMAKE_GENERATOR STREQUAL "Ninja")
+#  set(FMT_USE_CMAKE_MODULES TRUE)
+# endif ()
 
 # Adds a library compiled with C++20 module support.
 # `enabled` is a CMake variables that specifies if modules are enabled.
