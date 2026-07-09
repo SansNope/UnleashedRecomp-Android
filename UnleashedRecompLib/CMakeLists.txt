@@ -92,6 +92,9 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/shader/shader_cache.cpp"
     COMMAND
         ${UNLEASHED_RECOMP_XENOS_RECOMP_COMMAND}
+            "${CMAKE_CURRENT_SOURCE_DIR}/private"
+            "${CMAKE_CURRENT_SOURCE_DIR}/shader/shader_cache.cpp"
+            "${XENOS_RECOMP_INCLUDE}"
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/private/default_patched.xex"
         "${CMAKE_CURRENT_SOURCE_DIR}/private/shader_decompressed.ar"
