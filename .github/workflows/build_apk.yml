@@ -81,15 +81,15 @@ jobs:
     - name: Setup vcpkg
       shell: pwsh
       run: |
-        if (Test-Path vcpkg) {
-          Remove-Item -Recurse -Force vcpkg
-        }
-
-        git clone https://github.com/microsoft/vcpkg.git vcpkg
-
-        cmd /c vcpkg\bootstrap-vcpkg.bat
-
-        .\vcpkg\vcpkg.exe install freetype:x64-windows
+            if (Test-Path vcpkg) {
+               Remove-Item -Recurse -Force vcpkg
+            }
+                
+            git clone https://github.com/microsoft/vcpkg.git vcpkg
+                
+            cmd /c vcpkg\bootstrap-vcpkg.bat
+                
+            .\vcpkg\vcpkg.exe install freetype:x64-windows --triplet x64-windows
 
 
     #
