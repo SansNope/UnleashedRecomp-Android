@@ -60,7 +60,6 @@ namespace os::android
                 return legacy;
 
             const std::filesystem::path &external = GetExternalFilesDir();
-            const std::filesystem::path &external = GetExternalFilesDir();
 if (!external.empty())
 {
     // external = /storage/emulated/0/Android/data/<package>/files
