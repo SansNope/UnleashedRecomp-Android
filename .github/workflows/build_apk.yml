@@ -1,27 +1,70 @@
-- name: Build Host Tools
-  shell: cmd
-  run: |
-    cmake --preset x64-Clang-HostTools
-    cmake --build out/build/x64-Clang-HostTools
+name: Build UnleashedRecomp Android
 
+on:
+  workflow_dispatch:
 
-- name: Configure Android
-  shell: cmd
-  run: |
-    cmake -B out/build/android-arm64 ^
-    -G Ninja ^
-    -DUNLEASHED_RECOMP_ANDROID=ON ^
-    -DCMAKE_TOOLCHAIN_FILE=%ANDROID_HOME%\ndk\29.0.14206865\build\cmake\android.toolchain.cmake ^
-    -DANDROID_ABI=arm64-v8a ^
-    -DANDROID_PLATFORM=android-26 ^
-    -DCMAKE_BUILD_TYPE=Release ^
-    -DUNLEASHED_RECOMP_HOST_XENON_RECOMP=%CD%\out\build\x64-Clang-HostTools\tools\XenonRecomp.exe ^
-    -DUNLEASHED_RECOMP_HOST_XENOS_RECOMP=%CD%\out\build\x64-Clang-HostTools\tools\XenosRecomp.exe ^
-    -DUNLEASHED_RECOMP_HOST_FILE_TO_C=%CD%\out\build\x64-Clang-HostTools\tools\file_to_c.exe ^
-    -DUNLEASHED_RECOMP_HOST_X_DECOMPRESS=%CD%\out\build\x64-Clang-HostTools\tools\x_decompress.exe
+jobs:
+  build:
+    runs-on: windows-latest
 
+    steps:
 
-- name: Build Android
-  shell: cmd
-  run: |
-    cmake --build out/build/android-arm64 --target UnleashedRecomp
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android dependencies
+        shell: cmd
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;29.0.14206865" "cmake;3.31.0" "ninja"
+
+      - name: Build host tools
+        shell: cmd
+        run: |
+          cmake --preset x64-Clang-HostTools
+          cmake --build out/build/x64-Clang-HostTools
+
+      - name: Find host tools
+        shell: cmd
+        run: |
+          dir /s /b out\build\x64-Clang-HostTools\*.exe
+
+      - name: Configure Android ARM64
+        shell: cmd
+        run: |
+          cmake -B out/build/android-arm64 ^
+          -G Ninja ^
+          -DUNLEASHED_RECOMP_ANDROID=ON ^
+          -DCMAKE_TOOLCHAIN_FILE=%ANDROID_HOME%\ndk\29.0.14206865\build\cmake\android.toolchain.cmake ^
+          -DANDROID_ABI=arm64-v8a ^
+          -DANDROID_PLATFORM=android-26 ^
+          -DCMAKE_BUILD_TYPE=Release ^
+          -DUNLEASHED_RECOMP_HOST_XENON_RECOMP=%CD%\out\build\x64-Clang-HostTools\tools\XenonRecomp.exe ^
+          -DUNLEASHED_RECOMP_HOST_XENOS_RECOMP=%CD%\out\build\x64-Clang-HostTools\tools\XenosRecomp.exe ^
+          -DUNLEASHED_RECOMP_HOST_FILE_TO_C=%CD%\out\build\x64-Clang-HostTools\tools\file_to_c.exe ^
+          -DUNLEASHED_RECOMP_HOST_X_DECOMPRESS=%CD%\out\build\x64-Clang-HostTools\tools\x_decompress.exe
+
+      - name: Build native library
+        shell: cmd
+        run: |
+          cmake --build out/build/android-arm64 --target UnleashedRecomp
+
+      - name: Build APK
+        shell: cmd
+        working-directory: android-apk
+        run: |
+          gradlew.bat assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: UnleashedRecomp-Android-debug
+          path: android-apk/app/build/outputs/apk/debug/*.apk
