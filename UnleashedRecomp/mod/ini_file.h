@@ -1,6 +1,7 @@
 #pragma once
 
 #include <xxHashMap.h>
+#include "user/paths.h"
 
 class IniFile
 {
