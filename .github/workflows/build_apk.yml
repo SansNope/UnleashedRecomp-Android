@@ -49,6 +49,14 @@ jobs:
     #
     # Build host tools (Windows)
     #
+
+    - name: Extract zstd
+      shell: bash
+      run: |
+        mkdir -p tools/XenosRecomp/thirdparty/zstd
+        unzip -q thirdparty/zstd.zip -d tools/XenosRecomp/thirdparty/zstd
+        ls tools/XenosRecomp/thirdparty/zstd
+    
     - name: Build host tools
       shell: pwsh
       run: |
