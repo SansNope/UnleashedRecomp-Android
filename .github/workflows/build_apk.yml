@@ -24,7 +24,18 @@ jobs:
       - name: Install Android dependencies
         shell: cmd
         run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;29.0.14206865" "cmake;3.31.0" "ninja"
+          sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;29.0.14206865" "cmake;3.31.0"
+
+      - name: Install Ninja
+        shell: cmd
+        run: |
+          choco install ninja -y
+
+      - name: Setup environment
+        shell: cmd
+        run: |
+          echo ANDROID_NDK_HOME=%ANDROID_HOME%\ndk\29.0.14206865>> %GITHUB_ENV%
+          echo ANDROID_NDK_ROOT=%ANDROID_HOME%\ndk\29.0.14206865>> %GITHUB_ENV%
 
       - name: Build host tools
         shell: cmd
@@ -32,7 +43,7 @@ jobs:
           cmake --preset x64-Clang-HostTools
           cmake --build out/build/x64-Clang-HostTools
 
-      - name: Find host tools
+      - name: Locate host tools
         shell: cmd
         run: |
           dir /s /b out\build\x64-Clang-HostTools\*.exe
@@ -43,7 +54,7 @@ jobs:
           cmake -B out/build/android-arm64 ^
           -G Ninja ^
           -DUNLEASHED_RECOMP_ANDROID=ON ^
-          -DCMAKE_TOOLCHAIN_FILE=%ANDROID_HOME%\ndk\29.0.14206865\build\cmake\android.toolchain.cmake ^
+          -DCMAKE_TOOLCHAIN_FILE=%ANDROID_NDK_HOME%\build\cmake\android.toolchain.cmake ^
           -DANDROID_ABI=arm64-v8a ^
           -DANDROID_PLATFORM=android-26 ^
           -DCMAKE_BUILD_TYPE=Release ^
