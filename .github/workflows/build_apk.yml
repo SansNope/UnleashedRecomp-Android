@@ -89,7 +89,7 @@ jobs:
                 
             cmd /c vcpkg\bootstrap-vcpkg.bat
                 
-            .\vcpkg\vcpkg.exe install freetype:x64-windows --triplet x64-windows
+            .\vcpkg\vcpkg.exe install freetype --triplet x64-windows
 
 
     #
