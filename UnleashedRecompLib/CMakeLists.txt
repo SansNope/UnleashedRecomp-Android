@@ -50,6 +50,8 @@ add_custom_command(
         ${UNLEASHED_RECOMP_PPC_RECOMPILED_SOURCES}
     COMMAND
         ${UNLEASHED_RECOMP_XENON_RECOMP_COMMAND}
+            "${CMAKE_CURRENT_SOURCE_DIR}/config/SWA.toml"
+            "${UNLEASHED_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/ppc_context.h"
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/private/default.xex"
         "${CMAKE_CURRENT_SOURCE_DIR}/private/default.xexp"
