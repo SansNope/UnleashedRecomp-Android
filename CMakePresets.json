@@ -65,6 +65,11 @@
         "CMAKE_LINKER": "lld-link.exe",
         "CMAKE_BUILD_TYPE": "Release",
         "UNLEASHED_RECOMP_HOST_TOOLS_ONLY": "ON"
+    },
+    "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
     }
 },
         {
