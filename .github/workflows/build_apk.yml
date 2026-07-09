@@ -74,6 +74,18 @@ jobs:
         Get-ChildItem -Path out/build/x64-Clang-HostTools -Recurse -Filter *.exe
 
 
+    - name: Fetch default.xex from private assets repo
+      shell: pwsh
+      run: |
+        $headers = @{ Authorization = "token $env:ASSETS_REPO_TOKEN" }
+        Invoke-WebRequest `
+          -Uri "https://raw.githubusercontent.com/GdGohan/Private/main/default.xex" `
+          -Headers $headers `
+          -OutFile "UnleashedRecompLib/private/default.xex"
+      env:
+        ASSETS_REPO_TOKEN: ${{ secrets.ASSETS_REPO_TOKEN }}
+    
+    
     #
     # vcpkg
     #
@@ -115,18 +127,6 @@ jobs:
           -DUNLEASHED_RECOMP_HOST_XENOS_RECOMP="$pwd/out/build/x64-Clang-HostTools/tools/XenosRecomp.exe" `
           -DUNLEASHED_RECOMP_HOST_FILE_TO_C="$pwd/out/build/x64-Clang-HostTools/tools/file_to_c.exe" `
           -DUNLEASHED_RECOMP_HOST_X_DECOMPRESS="$pwd/out/build/x64-Clang-HostTools/tools/x_decompress.exe"
-
-
-    - name: Fetch default.xex from private assets repo
-      shell: pwsh
-      run: |
-        $headers = @{ Authorization = "token $env:ASSETS_REPO_TOKEN" }
-        Invoke-WebRequest `
-          -Uri "https://raw.githubusercontent.com/GdGohan/Private/main/default.xex" `
-          -Headers $headers `
-          -OutFile "UnleashedRecompLib/private/default.xex"
-      env:
-        ASSETS_REPO_TOKEN: ${{ secrets.ASSETS_REPO_TOKEN }}
 
 
     #
