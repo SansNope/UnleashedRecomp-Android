@@ -157,7 +157,7 @@ jobs:
     - name: Build hook libs and copy all native libs into APK project
       shell: pwsh
       run: |
-        cmake --build out/build/android-arm64
+        cmake --build out/build/android-arm64 --target UnleashedRecomp
         cmake --build out/build/android-arm64 --target hook_impl --target main_hook --target file_redirect_hook --target gsl_alloc_hook
 
         New-Item -ItemType Directory -Force -Path "android-apk/app/src/main/jniLibs/arm64-v8a" | Out-Null
