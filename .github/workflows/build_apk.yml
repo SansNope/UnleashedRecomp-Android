@@ -105,12 +105,16 @@ jobs:
     # vcpkg
     #
 
-    - name: Bootstrap vendored vcpkg
+    - name: Setup vcpkg
       shell: pwsh
       run: |
+        if (Test-Path thirdparty/vcpkg) {
+           Remove-Item -Recurse -Force thirdparty/vcpkg
+        }
+        git clone https://github.com/microsoft/vcpkg.git thirdparty/vcpkg
         cmd /c thirdparty\vcpkg\bootstrap-vcpkg.bat
         thirdparty\vcpkg\vcpkg.exe install --triplet arm64-android --overlay-triplets=vcpkg/triplets
-
+        
 
     #
     # Configure Android ARM64
