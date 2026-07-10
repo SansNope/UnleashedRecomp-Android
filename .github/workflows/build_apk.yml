@@ -163,6 +163,15 @@ jobs:
     #
     # Build APK
     #
+
+    - name: Generate custom app icon
+      shell: pwsh
+      run: |
+        magick resources/icon.png -resize 48x48   android-apk/app/src/main/res/mipmap-mdpi/ic_launcher.png
+        magick resources/icon.png -resize 72x72   android-apk/app/src/main/res/mipmap-hdpi/ic_launcher.png
+        magick resources/icon.png -resize 96x96   android-apk/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+        magick resources/icon.png -resize 144x144 android-apk/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+        magick resources/icon.png -resize 192x192 android-apk/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
     
     - name: Build APK
       shell: cmd
