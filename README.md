@@ -1,5 +1,8 @@
 # UnleashedRecomp — Android (Adreno) port — Mod Loader Fix
 
+<img width="640" height="360" alt="715 Sem Título_20260710122452" src="https://github.com/user-attachments/assets/00fa9b4a-4761-4cad-9ecb-060a5bec815d" />
+
+
 An **unofficial, Android port** of
 [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp) — the static
 recompilation of the Xbox 360 version of *Sonic Unleashed*. This repository is a
