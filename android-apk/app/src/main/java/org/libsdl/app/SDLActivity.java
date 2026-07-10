@@ -52,7 +52,10 @@ import android.widget.Toast;
 
 import java.util.Hashtable;
 import java.util.Locale;
+import android.opengl.EGL14;
+import android.opengl.GLES20;
 
+import javax.microedition.khronos.egl.EGL10;
 
 /**
     SDL Activity
@@ -62,8 +65,72 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     private static final int SDL_MAJOR_VERSION = 2;
     private static final int SDL_MINOR_VERSION = 31;
     private static final int SDL_MICRO_VERSION = 0;
+
+    public static String getRenderer() {
+    android.opengl.EGLDisplay display = EGL14.eglGetDisplay(EGL14.EGL_DEFAULT_DISPLAY);
+
+    int[] version = new int[2];
+    EGL14.eglInitialize(display, version, 0, version, 1);
+
+    int[] configAttribs = {
+            EGL14.EGL_RENDERABLE_TYPE, EGL14.EGL_OPENGL_ES2_BIT,
+            EGL14.EGL_NONE
+    };
+
+    android.opengl.EGLConfig[] configs = new android.opengl.EGLConfig[1];
+    int[] numConfigs = new int[1];
+
+    EGL14.eglChooseConfig(
+            display,
+            configAttribs, 0,
+            configs, 0,
+            1,
+            numConfigs, 0
+    );
+
+    int[] contextAttribs = {
+            EGL14.EGL_CONTEXT_CLIENT_VERSION, 2,
+            EGL14.EGL_NONE
+    };
+
+    android.opengl.EGLContext context = EGL14.eglCreateContext(
+            display,
+            configs[0],
+            EGL14.EGL_NO_CONTEXT,
+            contextAttribs, 0
+    );
+
+    int[] surfaceAttribs = {
+            EGL14.EGL_WIDTH, 1,
+            EGL14.EGL_HEIGHT, 1,
+            EGL14.EGL_NONE
+    };
+
+    android.opengl.EGLSurface surface = EGL14.eglCreatePbufferSurface(
+            display,
+            configs[0],
+            surfaceAttribs, 0
+    );
+
+    EGL14.eglMakeCurrent(display, surface, surface, context);
+
+    String renderer = GLES20.glGetString(GLES20.GL_RENDERER);
+
+    EGL14.eglMakeCurrent(
+            display,
+            EGL14.EGL_NO_SURFACE,
+            EGL14.EGL_NO_SURFACE,
+            EGL14.EGL_NO_CONTEXT
+    );
+
+    EGL14.eglDestroySurface(display, surface);
+    EGL14.eglDestroyContext(display, context);
+    EGL14.eglTerminate(display);
+
+    return renderer;
+    }
 /*
-    // Display InputType.SOURCE/CLASS of events and devices
+    // Display InputType.SOURCE/CLASSof events and devices
     //
     // SDLActivity.debugSource(device.getSources(), "device[" + device.getName() + "]");
     // SDLActivity.debugSource(event.getSource(), "event");
@@ -326,6 +393,22 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         } catch (Exception e) {
             Log.v(TAG, "modify thread properties failed " + e.toString());
         }
+
+        String renderer = getRenderer();
+
+if (renderer != null && renderer.matches(".*Adreno \\(TM\\) 6\\d\\d.*")) {
+    File mediaDir = getExternalMediaDirs()[0];
+    File driverImport = new File(mediaDir, "driver_import");
+    if (!driverImport.exists()) driverImport.mkdirs();
+
+    File tuDebug = new File(driverImport, "tu_debug.txt");
+
+    if (!tuDebug.exists()) {
+        try (FileWriter writer = new FileWriter(tuDebug)) {
+            writer.write("sysmem");
+        }
+    }
+}
 
         // Load shared libraries
         String errorMsgBrokenLib = "";
