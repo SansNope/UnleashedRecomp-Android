@@ -352,7 +352,6 @@ int main(int argc, char *argv[])
                 "Game files not found.\n\n"
                 "Copy your Sonic Unleashed dump folders (game, update, dlc) into:\n\n"
                 "%s\n\n"
-                "The folder is accessible from a PC over a USB cable.\n"
                 "Restart the app after copying.",
                 (const char *)GetGamePath().u8string().c_str());
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, GameWindow::GetTitle(), text, GameWindow::s_pWindow);
