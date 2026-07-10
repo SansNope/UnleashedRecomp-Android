@@ -147,9 +147,13 @@ void ModLoader::Init()
 
         std::filesystem::path modIniFilePath(std::u8string_view((const char8_t*)modIniFilePathU8.c_str()));
 
+        LOGF_IMPL(Utility, "Mod Loader", "Trying: {}", modIniFilePath.string());
+
         IniFile modIni;
-        if (!modIni.read(modIniFilePath))
-            continue;
+        if (!modIni.read(modIniFilePath)) {
+            LOGF_IMPL(Utility, "Mod Loader", "Failed to open {}", modIniFilePath.string());
+            continue; 
+        }
 
         auto modDirectoryPath = modIniFilePath.parent_path();
         std::string modSaveFilePathU8;
