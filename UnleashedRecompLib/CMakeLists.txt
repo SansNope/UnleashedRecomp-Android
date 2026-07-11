@@ -49,7 +49,13 @@ add_custom_command(
         "${CMAKE_CURRENT_SOURCE_DIR}/private/default_patched.xex"
         ${UNLEASHED_RECOMP_PPC_RECOMPILED_SOURCES}
     COMMAND
+        # The explicit arguments matter for prebuilt host tools compiled without the
+        # XENON_RECOMP_CONFIG_FILE_PATH definition: such a binary invoked bare prints its
+        # usage text and exits 0, so the rule "succeeds" without producing any outputs.
+        # Binaries that do have the baked-in paths ignore these arguments entirely.
         ${UNLEASHED_RECOMP_XENON_RECOMP_COMMAND}
+            "${CMAKE_CURRENT_SOURCE_DIR}/config/SWA.toml"
+            "${UNLEASHED_RECOMP_TOOLS_ROOT}/XenonRecomp/XenonUtils/ppc_context.h"
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/private/default.xex"
         "${CMAKE_CURRENT_SOURCE_DIR}/private/default.xexp"
