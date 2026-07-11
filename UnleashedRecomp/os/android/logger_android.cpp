@@ -1,5 +1,6 @@
 #include <os/logger.h>
 
+#include <cpu/guest_thread.h>
 #include <os/android/storage_android.h>
 
 #include <android/log.h>
@@ -230,6 +231,9 @@ static void* WatchdogThread(void*)
         // The game is intentionally frozen (backgrounded); missing frames are not a hang.
         if (s_watchdogSuspended.load(std::memory_order_relaxed))
             continue;
+
+        // Catch guest stacks that silently overran into the user heap (issue #27).
+        GuestThread::CheckStackCanaries();
 
         const double now = MonotonicSeconds() - s_startSeconds;
         const double last = s_lastHeartbeat.load(std::memory_order_relaxed);
@@ -487,7 +491,7 @@ void os::logger::Init()
     // fresh file, even if this run happens to log nothing else before a freeze.
     WriteLogRecord("[logger]", nullptr, "Unleashed Recomp log started", 28);
     static constexpr char BuildVersion[] = "=== APK VERSION: 1.5.1-roadmap-v37 (2026-07-12) ===";
-    static constexpr char BuildId[] = "ANDROID_BUILD_ID=1.5.1-roadmap-v37-diag5-tso";
+    static constexpr char BuildId[] = "ANDROID_BUILD_ID=1.5.1-roadmap-v37-diag6-stacks";
     WriteLogRecord("[build]", nullptr, BuildVersion, sizeof(BuildVersion) - 1);
     WriteLogRecord("[build]", nullptr, BuildId, sizeof(BuildId) - 1);
     LogDeviceInfo();
