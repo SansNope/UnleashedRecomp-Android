@@ -80,13 +80,22 @@ namespace plume {
     
     static const std::unordered_set<std::string> RequiredDeviceExtensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    };
+
+    static const std::unordered_set<std::string> OptionalDeviceExtensions = {
+        // Promoted to core in Vulkan 1.2. Drivers at API 1.2+ are not required to keep listing
+        // the original extension strings (e.g. stock Mali/PowerVR blobs), so these must not be
+        // hard-required by name: they are enabled by name when listed, and on 1.2+ devices the
+        // equivalent features are queried and enabled through VkPhysicalDeviceVulkan12Features.
+        // scalarBlockLayout and bufferDeviceAddress remain functionally mandatory (every
+        // recompiled game shader loads constants through vk::RawBufferLoad) and are validated
+        // as features after the query instead.
         VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME,
-        VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
         VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
         VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME,
-    };
-    
-    static const std::unordered_set<std::string> OptionalDeviceExtensions = {
+        // Optional: when nullDescriptor is unavailable the backend already substitutes a dummy
+        // vertex buffer, and MIRROR_ONCE samplers fall back to MIRRORED_REPEAT.
+        VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
         VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
         VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
         VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME,
@@ -579,6 +588,18 @@ namespace plume {
             assert(false && "Unknown texture address mode.");
             return VK_SAMPLER_ADDRESS_MODE_MAX_ENUM;
         }
+    }
+
+    static VkSamplerAddressMode toVk(RenderTextureAddressMode mode, const VulkanDevice *device) {
+        VkSamplerAddressMode vkMode = toVk(mode);
+
+        // MIRROR_CLAMP_TO_EDGE requires the samplerMirrorClampToEdge feature (core 1.2) or the
+        // extension. MIRRORED_REPEAT matches its behavior exactly for coordinates in [-1, 1].
+        if ((vkMode == VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE) && !device->samplerMirrorClampToEdgeSupported) {
+            vkMode = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        }
+
+        return vkMode;
     }
 
     static VkBorderColor toVk(RenderBorderColor color) {
@@ -1338,9 +1359,9 @@ namespace plume {
         samplerInfo.minFilter = toVk(desc.minFilter);
         samplerInfo.magFilter = toVk(desc.magFilter);
         samplerInfo.mipmapMode = toVk(desc.mipmapMode);
-        samplerInfo.addressModeU = toVk(desc.addressU);
-        samplerInfo.addressModeV = toVk(desc.addressV);
-        samplerInfo.addressModeW = toVk(desc.addressW);
+        samplerInfo.addressModeU = toVk(desc.addressU, device);
+        samplerInfo.addressModeV = toVk(desc.addressV, device);
+        samplerInfo.addressModeW = toVk(desc.addressW, device);
         samplerInfo.mipLodBias = desc.mipLODBias;
         samplerInfo.anisotropyEnable = desc.anisotropyEnabled;
         samplerInfo.maxAnisotropy = float(desc.maxAnisotropy);
@@ -3911,16 +3932,33 @@ namespace plume {
         // Store properties.
         vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
 
-        // Check for supported features.
-        void *featuresChain = nullptr;
-        VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures = {};
-        indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-        featuresChain = &indexingFeatures;
+        // Check for supported features. The effective device version is capped by the version
+        // requested at instance creation (appInfo.apiVersion).
+        const uint32_t effectiveApiVersion = std::min(renderInterface->appInfo.apiVersion, physicalDeviceProperties.apiVersion);
+        const bool coreVulkan12 = effectiveApiVersion >= VK_API_VERSION_1_2;
 
+        // On Vulkan 1.2+ devices the promoted features (descriptor indexing, scalar block layout,
+        // buffer device address, samplerMirrorClampToEdge) are queried and enabled through the
+        // core VkPhysicalDeviceVulkan12Features struct: the spec forbids mixing it with the
+        // individual promoted structs in VkDeviceCreateInfo, and drivers that only ship the core
+        // functionality don't have to list the pre-promotion extension strings. Devices below 1.2
+        // (e.g. stock Adreno at 1.1) keep using the individual extension structs.
+        void *featuresChain = nullptr;
+        VkPhysicalDeviceVulkan12Features vulkan12Features = {};
+        VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures = {};
         VkPhysicalDeviceScalarBlockLayoutFeatures layoutFeatures = {};
-        layoutFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
-        layoutFeatures.pNext = featuresChain;
-        featuresChain = &layoutFeatures;
+        if (coreVulkan12) {
+            vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+            featuresChain = &vulkan12Features;
+        }
+        else {
+            indexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+            featuresChain = &indexingFeatures;
+
+            layoutFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
+            layoutFeatures.pNext = featuresChain;
+            featuresChain = &layoutFeatures;
+        }
 
         VkPhysicalDevicePresentIdFeaturesKHR presentIdFeatures = {};
         VkPhysicalDevicePresentWaitFeaturesKHR presentWaitFeatures = {};
@@ -3941,9 +3979,11 @@ namespace plume {
         featuresChain = &robustnessFeatures;
 
         VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {};
-        bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-        bufferDeviceAddressFeatures.pNext = featuresChain;
-        featuresChain = &bufferDeviceAddressFeatures;
+        if (!coreVulkan12) {
+            bufferDeviceAddressFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+            bufferDeviceAddressFeatures.pNext = featuresChain;
+            featuresChain = &bufferDeviceAddressFeatures;
+        }
 
         VkPhysicalDevicePortabilitySubsetFeaturesKHR portabilityFeatures = {};
         portabilityFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PORTABILITY_SUBSET_FEATURES_KHR;
@@ -3987,16 +4027,30 @@ namespace plume {
             vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
         }
 
-        const bool descriptorIndexing = indexingFeatures.descriptorBindingPartiallyBound && indexingFeatures.descriptorBindingVariableDescriptorCount && indexingFeatures.runtimeDescriptorArray;
-        if (descriptorIndexing) {
-            indexingFeatures.pNext = createDeviceChain;
-            createDeviceChain = &indexingFeatures;
-        }
+        const bool descriptorIndexing = coreVulkan12
+            ? (vulkan12Features.descriptorBindingPartiallyBound && vulkan12Features.descriptorBindingVariableDescriptorCount && vulkan12Features.runtimeDescriptorArray)
+            : (indexingFeatures.descriptorBindingPartiallyBound && indexingFeatures.descriptorBindingVariableDescriptorCount && indexingFeatures.runtimeDescriptorArray);
+        const bool scalarBlockLayout = coreVulkan12 ? bool(vulkan12Features.scalarBlockLayout) : bool(layoutFeatures.scalarBlockLayout);
+        const bool samplerMirrorClampToEdge =
+            (coreVulkan12 && vulkan12Features.samplerMirrorClampToEdge) ||
+            (supportedOptionalExtensions.find(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME) != supportedOptionalExtensions.end());
 
-        const bool scalarBlockLayout = layoutFeatures.scalarBlockLayout;
-        if (scalarBlockLayout) {
-            layoutFeatures.pNext = createDeviceChain;
-            createDeviceChain = &layoutFeatures;
+        if (coreVulkan12) {
+            // Enable every supported 1.2 feature as queried, matching how the individual structs
+            // below are enabled as queried on the pre-1.2 path.
+            vulkan12Features.pNext = createDeviceChain;
+            createDeviceChain = &vulkan12Features;
+        }
+        else {
+            if (descriptorIndexing) {
+                indexingFeatures.pNext = createDeviceChain;
+                createDeviceChain = &indexingFeatures;
+            }
+
+            if (scalarBlockLayout) {
+                layoutFeatures.pNext = createDeviceChain;
+                createDeviceChain = &layoutFeatures;
+            }
         }
 
         const bool presentWait = presentIdFeatures.presentId && presentWaitFeatures.presentWait;
@@ -4014,10 +4068,21 @@ namespace plume {
             createDeviceChain = &robustnessFeatures;
         }
 
-        const bool bufferDeviceAddress = bufferDeviceAddressFeatures.bufferDeviceAddress;
-        if (bufferDeviceAddress) {
+        const bool bufferDeviceAddress = coreVulkan12 ? bool(vulkan12Features.bufferDeviceAddress) : bool(bufferDeviceAddressFeatures.bufferDeviceAddress);
+        if (!coreVulkan12 && bufferDeviceAddress) {
             bufferDeviceAddressFeatures.pNext = createDeviceChain;
             createDeviceChain = &bufferDeviceAddressFeatures;
+        }
+
+        // Previously enforced by requiring the pre-promotion extension strings. Every recompiled
+        // game shader loads its constants through physical storage buffer addresses with scalar
+        // layout, so a device without these features cannot run the game; fail cleanly here
+        // instead of producing broken pipelines later.
+        if (!scalarBlockLayout || !bufferDeviceAddress) {
+            fprintf(stderr, "Unable to create device. Required features are missing: scalarBlockLayout=%d, bufferDeviceAddress=%d (API version %u.%u).\n",
+                int(scalarBlockLayout), int(bufferDeviceAddress),
+                VK_API_VERSION_MAJOR(effectiveApiVersion), VK_API_VERSION_MINOR(effectiveApiVersion));
+            return;
         }
 
         const bool portabilitySubset = supportedOptionalExtensions.find(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME) != supportedOptionalExtensions.end();
@@ -4152,7 +4217,10 @@ namespace plume {
         allocatorInfo.device = vk;
         allocatorInfo.pVulkanFunctions = &vmaFunctions;
         allocatorInfo.instance = renderInterface->instance;
-        allocatorInfo.vulkanApiVersion = renderInterface->appInfo.apiVersion;
+        // VMA requires the effective version, not the instance-requested one: passing 1.2 on a
+        // 1.1-only device (e.g. stock Adreno) makes it resolve core-1.2 entry points that the
+        // driver only exports under their KHR names.
+        allocatorInfo.vulkanApiVersion = effectiveApiVersion;
 
         res = vmaCreateAllocator(&allocatorInfo, &allocator);
         if (res != VK_SUCCESS) {
@@ -4213,9 +4281,14 @@ namespace plume {
         // Fill Vulkan-only capabilities.
         loadStoreOpNoneSupported = supportedOptionalExtensions.find(VK_EXT_LOAD_STORE_OP_NONE_EXTENSION_NAME) != supportedOptionalExtensions.end();
         nullDescriptorSupported = nullDescriptor;
+        samplerMirrorClampToEdgeSupported = samplerMirrorClampToEdge;
 
         if (!nullDescriptorSupported) {
             nullBuffer = createBuffer(RenderBufferDesc::DefaultBuffer(16, RenderBufferFlag::VERTEX));
+        }
+
+        if (!samplerMirrorClampToEdgeSupported) {
+            fprintf(stderr, "samplerMirrorClampToEdge is not supported. MIRROR_ONCE samplers will fall back to MIRRORED_REPEAT.\n");
         }
     }
 
