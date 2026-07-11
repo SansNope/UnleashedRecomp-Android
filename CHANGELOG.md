@@ -4,6 +4,9 @@
 
 ### Fixes
 
+- The profiler overlay no longer opens on every launch (issue #46). It is off by default, can be enabled with the new "Show profiler overlay" launcher checkbox, and closing it in-game with its X button is remembered across launches.
+- The mod manager no longer creates a second `mods` folder in the transfer root (issue #42). Only `<game root>/mods` is created; an empty leftover transfer folder from 0.3.0 is removed automatically, and mods already placed there are still detected.
+- Worked around the "ring crash" from issue #27 (100% crash on Snapdragon 8 Gen 2 handhelds when collecting a ring, independent of driver, render mode and frame rate): the game's animation node evaluator dereferences a child node data pointer that is 0 or -1 on those devices. The evaluation is now skipped for such nodes and the state is logged instead of crashing; the root cause in game data/state is still under investigation.
 - Fixed a crash when applying the window-size option while the app is backgrounded: on Android the display-mode list is empty whenever the native window is detached, and the callback indexed entry `-1` of the empty list (`SIGSEGV` at `fault_addr=0xffffffffffffec` on the main thread, seen on AYN Thor in issue #27). The callback now skips the update until display modes are available again.
 - Log-file version banner now matches the released APK version; 0.3.0 builds still reported `1.5.0-roadmap-v34` in `log.txt`, which made log triage misleading.
 

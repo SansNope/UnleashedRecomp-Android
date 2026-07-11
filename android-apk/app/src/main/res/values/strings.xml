@@ -36,6 +36,7 @@
     <string name="launcher_manage_mods">Manage mods</string>
     <string name="launcher_debug">Debug options</string>
     <string name="launcher_show_fps">Show FPS</string>
+    <string name="launcher_show_profiler">Show profiler overlay</string>
     <string name="launcher_skip_intro">Skip intro logos</string>
     <string name="launcher_validation">Vulkan synchronization validation (slow)</string>
     <string name="launcher_gfx_capture">Record GFXReconstruct trace (very large and slow)</string>

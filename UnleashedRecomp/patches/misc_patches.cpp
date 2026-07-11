@@ -1,5 +1,8 @@
 #include <api/SWA.h>
+#include <os/logger.h>
 #include <ui/game_window.h>
+
+#include <atomic>
 #include <user/achievement_manager.h>
 #include <user/persistent_storage_manager.h>
 #include <user/config.h>
@@ -192,4 +195,40 @@ PPC_FUNC(sub_824EE620)
     __imp__sub_824EE620(ctx, base);
 
     ctx.r3.u32 = PersistentStorageManager::ShouldDisplayDLCMessage(true);
+}
+
+// Animation node evaluator. The function dispatches on a type byte at +0; the type-4
+// branch interpolates between two child nodes (+16 / +20) and dereferences each child's
+// data pointer at +8 without validating it. On some devices (issue #27: Snapdragon
+// 8 Gen 2 handhelds, 100% on collecting a ring) one of those data pointers is 0 or -1,
+// which reads guest address 0x5B..0x5C and crashes. Root cause unknown (likely an
+// unbound animation track); skip the evaluation instead of crashing and log the state
+// so reports tell us how often it fires.
+PPC_FUNC_IMPL(__imp__sub_82F77188);
+PPC_FUNC(sub_82F77188)
+{
+    if (PPC_LOAD_U8(ctx.r3.u32 + 0) == 4)
+    {
+        auto invalidPtr = [](uint32_t ptr) { return ptr == 0 || ptr == 0xFFFFFFFF; };
+
+        uint32_t childA = PPC_LOAD_U32(ctx.r3.u32 + 16);
+        uint32_t childB = PPC_LOAD_U32(ctx.r3.u32 + 20);
+        uint32_t dataA = invalidPtr(childA) ? 0 : PPC_LOAD_U32(childA + 8);
+        uint32_t dataB = invalidPtr(childB) ? 0 : PPC_LOAD_U32(childB + 8);
+
+        if (invalidPtr(dataA) || invalidPtr(dataB))
+        {
+            static std::atomic<uint32_t> s_reportCount{ 0 };
+            if (s_reportCount.fetch_add(1, std::memory_order_relaxed) < 8)
+            {
+                LOGFN_ERROR("sub_82F77188: skipping type-4 node with invalid data "
+                    "(this={:08X} childA={:08X} dataA={:08X} childB={:08X} dataB={:08X})",
+                    ctx.r3.u32, childA, dataA, childB, dataB);
+            }
+
+            return;
+        }
+    }
+
+    __imp__sub_82F77188(ctx, base);
 }
