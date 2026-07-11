@@ -308,13 +308,10 @@ static uint32_t g_statPipelineBinds;
 static uint32_t g_statBarrierCalls;
 static uint32_t g_statFramebufferSets;
 
-#ifdef __ANDROID__
-// No keyboard on Android to hit the F1 toggle, so keep the overlay on while the
-// port's performance is being investigated.
-static bool g_profilerVisible = true;
-#else
+// On Android there is no F1 key: the initial state comes from Config::ShowProfiler
+// (launcher checkbox), and closing the overlay writes the config back so it stays
+// closed on the next launch (issue #46). See DrawProfiler.
 static bool g_profilerVisible;
-#endif
 static bool g_profilerWasToggled;
 
 #ifdef UNLEASHED_RECOMP_D3D12
@@ -2534,6 +2531,15 @@ static const char *DeviceTypeName(RenderDeviceType type)
 
 static void DrawProfiler()
 {
+#ifdef __ANDROID__
+    static bool s_profilerVisibilityInitialized;
+    if (!s_profilerVisibilityInitialized)
+    {
+        g_profilerVisible = Config::ShowProfiler;
+        s_profilerVisibilityInitialized = true;
+    }
+#endif
+
     bool toggleProfiler = SDL_GetKeyboardState(nullptr)[SDL_SCANCODE_F1] != 0;
 
     if (!g_profilerWasToggled && toggleProfiler)
@@ -2672,6 +2678,16 @@ static void DrawProfiler()
         }
     }
     ImGui::End();
+
+#ifdef __ANDROID__
+    // Closing the overlay with its X button is the only in-game toggle on Android;
+    // persist it so the window does not come back on every launch (issue #46).
+    if (!g_profilerVisible && Config::ShowProfiler)
+    {
+        Config::ShowProfiler.Value = false;
+        Config::Save();
+    }
+#endif
 
     ImGui::PopFont();
     font->Scale = defaultScale;

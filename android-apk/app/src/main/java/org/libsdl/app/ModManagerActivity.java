@@ -134,16 +134,25 @@ public final class ModManagerActivity extends Activity {
             ? new File(getExternalFilesDir(null), "mods")
             : gameMods;
         gameMods.mkdirs();
-        transferMods.mkdirs();
+        // 0.3.0 also auto-created a second mods folder in the transfer root, which
+        // confused users about where mods belong (issue #42). Only the game-root folder
+        // is created now; the transfer one is removed when empty and still scanned when
+        // the user actually put mods in it.
+        if (!transferMods.equals(gameMods)) {
+            transferMods.delete();
+        }
 
         Map<String, ModEntry> discovered = new LinkedHashMap<>();
         scanForMods(gameMods, 0, discovered);
         try {
-            if (!gameMods.getCanonicalFile().equals(transferMods.getCanonicalFile())) {
+            if (transferMods.isDirectory()
+                    && !gameMods.getCanonicalFile().equals(transferMods.getCanonicalFile())) {
                 scanForMods(transferMods, 0, discovered);
             }
         } catch (IOException exception) {
-            scanForMods(transferMods, 0, discovered);
+            if (transferMods.isDirectory()) {
+                scanForMods(transferMods, 0, discovered);
+            }
         }
 
         File userDirectory = new File(activeGameRoot, ".config/UnleashedRecomp");

@@ -54,6 +54,7 @@ public final class LauncherActivity extends Activity {
     private Spinner renderSpinner;
     private Spinner touchSpinner;
     private CheckBox showFps;
+    private CheckBox showProfiler;
     private CheckBox skipIntro;
     private CheckBox validation;
     private CheckBox gfxCapture;
@@ -131,10 +132,12 @@ public final class LauncherActivity extends Activity {
 
         LinearLayout debug = card(R.string.launcher_debug);
         showFps = checkBox(R.string.launcher_show_fps);
+        showProfiler = checkBox(R.string.launcher_show_profiler);
         skipIntro = checkBox(R.string.launcher_skip_intro);
         validation = checkBox(R.string.launcher_validation);
         gfxCapture = checkBox(R.string.launcher_gfx_capture);
         debug.addView(showFps);
+        debug.addView(showProfiler);
         debug.addView(skipIntro);
         debug.addView(validation);
         debug.addView(gfxCapture);
@@ -242,6 +245,7 @@ public final class LauncherActivity extends Activity {
         select(touchSpinner, config.get("Input.TouchControls"),
             new String[] {"Auto", "Always On", "Off"});
         showFps.setChecked(Boolean.parseBoolean(config.get("Video.ShowFPS")));
+        showProfiler.setChecked(Boolean.parseBoolean(config.get("Video.ShowProfiler")));
         skipIntro.setChecked(Boolean.parseBoolean(config.get("Codes.SkipIntroLogos")));
         validation.setChecked(new File(getFilesDir(), "turnip/vk_layer_settings.txt").isFile());
         gfxCapture.setChecked(new File(AppStorage.driverImportDir(this), "gfxrecon_capture.txt").isFile());
@@ -252,6 +256,7 @@ public final class LauncherActivity extends Activity {
         values.put("Video.VulkanDriver", quote(new String[] {"Auto", "System", "Bundled", "Vauzi710", "Imported"}[driverSpinner.getSelectedItemPosition()]));
         values.put("Video.RenderMode", quote(new String[] {"Auto", "GMEM", "Sysmem"}[renderSpinner.getSelectedItemPosition()]));
         values.put("Video.ShowFPS", Boolean.toString(showFps.isChecked()));
+        values.put("Video.ShowProfiler", Boolean.toString(showProfiler.isChecked()));
         values.put("Input.TouchControls", quote(new String[] {"Auto", "Always On", "Off"}[touchSpinner.getSelectedItemPosition()]));
         values.put("Codes.SkipIntroLogos", Boolean.toString(skipIntro.isChecked()));
         try {

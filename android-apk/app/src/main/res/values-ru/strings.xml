@@ -32,6 +32,7 @@
     <string name="launcher_manage_mods">Управление модами</string>
     <string name="launcher_debug">Отладка</string>
     <string name="launcher_show_fps">Показывать FPS</string>
+    <string name="launcher_show_profiler">Показывать оверлей профайлера</string>
     <string name="launcher_skip_intro">Пропускать вступительные ролики</string>
     <string name="launcher_validation">Проверка синхронизации Vulkan (медленно)</string>
     <string name="launcher_gfx_capture">Записывать трассу GFXReconstruct (очень большой файл, медленно)</string>
