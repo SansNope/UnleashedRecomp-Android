@@ -20,8 +20,8 @@ android {
         applicationId "com.sega.sonicunr"
         minSdkVersion 29
         targetSdkVersion 34
-        versionCode 12
-        versionName "1.5.1-roadmap-v37"
+        versionCode 13
+        versionName "0.4.0"
         externalNativeBuild {
             ndkBuild {
                 arguments "APP_PLATFORM=android-29"
