@@ -5,6 +5,8 @@
 #include <user/config.h>
 
 #include <adrenotools/driver.h>
+#include <miniz.h>
+#include <nlohmann/json.hpp>
 
 #include <SDL.h>
 #include <SDL_system.h>
@@ -539,8 +541,112 @@ static uint64_t DriverFingerprint(const std::vector<uint8_t> &driver)
     return hash;
 }
 
+static bool IsSafeDriverFileName(const std::string &driverName);
+
+// Imports an adrenotools-style driver package: a zip whose meta.json names the entry
+// library ("libraryName") plus the driver binaries - the layout ExynosTools ships for
+// Samsung Xclipse and AdrenoToolsDrivers releases use. Every regular file is extracted
+// flat (basename only, so hostile entry paths cannot escape) into the turnip dir; the
+// adrenotools linker namespace resolves the package's dependent libraries from there.
+// Zips without meta.json fall back to selecting the single .so inside.
+static bool ImportDriverPackage(const std::filesystem::path &zipPath, const std::filesystem::path &turnipDir, std::string &selectedName)
+{
+    mz_zip_archive zip{};
+    if (!mz_zip_reader_init_file(&zip, zipPath.string().c_str(), 0))
+    {
+        LOGF_ERROR("Driver import: {} is not a readable zip archive.", zipPath.filename().string());
+        return false;
+    }
+
+    struct ZipEntry
+    {
+        std::string baseName;
+        mz_uint index;
+    };
+
+    std::vector<ZipEntry> entries;
+    std::string libraryName;
+    std::string onlySoName;
+    uint32_t soCount = 0;
+
+    const mz_uint fileCount = mz_zip_reader_get_num_files(&zip);
+    for (mz_uint i = 0; i < fileCount; i++)
+    {
+        mz_zip_archive_file_stat stat;
+        if (!mz_zip_reader_file_stat(&zip, i, &stat) || stat.m_is_directory)
+            continue;
+
+        std::string baseName = std::filesystem::path(stat.m_filename).filename().string();
+        if (baseName.empty())
+            continue;
+
+        if (baseName.size() > 3 && baseName.compare(baseName.size() - 3, 3, ".so") == 0)
+        {
+            ++soCount;
+            onlySoName = baseName;
+        }
+
+        entries.push_back({ std::move(baseName), i });
+    }
+
+    for (const ZipEntry &entry : entries)
+    {
+        if (entry.baseName != "meta.json")
+            continue;
+
+        size_t metaSize = 0;
+        void *meta = mz_zip_reader_extract_to_heap(&zip, entry.index, &metaSize, 0);
+        if (meta != nullptr)
+        {
+            const auto parsed = nlohmann::json::parse(
+                static_cast<const char *>(meta), static_cast<const char *>(meta) + metaSize, nullptr, false);
+            if (!parsed.is_discarded())
+                libraryName = parsed.value("libraryName", "");
+
+            mz_free(meta);
+        }
+        break;
+    }
+
+    if (libraryName.empty() && soCount == 1)
+        libraryName = onlySoName;
+
+    if (!IsSafeDriverFileName(libraryName))
+    {
+        LOGF_ERROR("Driver import: {} has no usable meta.json libraryName and does not contain exactly one .so.",
+            zipPath.filename().string());
+        mz_zip_reader_end(&zip);
+        return false;
+    }
+
+    bool ok = true;
+    for (const ZipEntry &entry : entries)
+    {
+        size_t size = 0;
+        void *data = mz_zip_reader_extract_to_heap(&zip, entry.index, &size, 0);
+        if (data == nullptr || !WriteWholeFile(turnipDir / entry.baseName, data, size))
+        {
+            LOGF_ERROR("Driver import: failed to extract {} from {}.", entry.baseName, zipPath.filename().string());
+            ok = false;
+        }
+
+        if (data != nullptr)
+            mz_free(data);
+
+        if (!ok)
+            break;
+    }
+
+    mz_zip_reader_end(&zip);
+    if (ok)
+        selectedName = libraryName;
+
+    return ok;
+}
+
 // Users can drop an arbitrary Turnip build (plain .so, extracted from the release zip)
-// into <external>/driver_import/. It is copied byte-for-byte to internal storage, selected
+// or a whole driver package zip (see ImportDriverPackage) into <external>/driver_import/.
+// It is copied byte-for-byte to internal storage, selected
 // via driver_name.txt, and moved to driver_import/installed/ so it isn't re-processed every
 // launch. Imported binaries must never be rewritten: exact inputs are required for reliable
 // A/B tests and a byte-pattern patch cannot establish compatibility with an unknown build.
@@ -556,8 +662,9 @@ static void ProcessDriverImportDir(const std::filesystem::path &turnipDir)
 
     // Rewritten every launch so testers always see the current instructions.
     WriteTextFile(importDir / "readme.txt",
-        "Optional: drop a Mesa Turnip Vulkan driver here as a plain .so file\n"
-        "(extract it from the driver zip first, e.g. libvulkan_freedreno.so).\n"
+        "Optional: drop a Vulkan driver here as a plain .so file (e.g. a Mesa\n"
+        "Turnip libvulkan_freedreno.so) or as a whole driver-package .zip with\n"
+        "a meta.json (AdrenoTools packages, ExynosTools for Samsung Xclipse).\n"
         "On the next launch it will be installed byte-for-byte and selected.\n"
         "Processed files move to the installed/ subfolder. The app never patches\n"
         "imported binaries; use a source-built workaround when one is required.\n"
@@ -593,39 +700,55 @@ static void ProcessDriverImportDir(const std::filesystem::path &turnipDir)
         "the CPU when the driver lacks them; create force_no_bc.txt in THIS\n"
         "folder to test that path on hardware with native BC support. On Mali\n"
         "you can experiment with importing a PanVK build (a plain .so) here.\n"
-        "Samsung Xclipse compatibility packages from\n"
-        "https://github.com/WearyConcern1165/ExynosTools are multi-file bundles\n"
-        "and cannot be imported here yet.\n");
+        "On Samsung Xclipse, drop an ExynosTools package zip from\n"
+        "https://github.com/WearyConcern1165/ExynosTools into this folder to\n"
+        "use its compatibility layer instead of the plain system driver.\n");
 
     for (const auto &entry : std::filesystem::directory_iterator(importDir, ec))
     {
-        if (!entry.is_regular_file(ec) || entry.path().extension() != ".so")
+        if (!entry.is_regular_file(ec))
             continue;
 
+        const std::filesystem::path extension = entry.path().extension();
         std::string fileName = entry.path().filename().string();
+        std::string selectedName;
 
-        std::vector<uint8_t> driver;
-        if (!ReadWholeFile(entry.path(), driver))
+        if (extension == ".so")
         {
-            LOGF_ERROR("Driver import: failed to read {}", fileName);
+            std::vector<uint8_t> driver;
+            if (!ReadWholeFile(entry.path(), driver))
+            {
+                LOGF_ERROR("Driver import: failed to read {}", fileName);
+                continue;
+            }
+
+            if (!WriteWholeFile(turnipDir / fileName, driver.data(), driver.size()))
+            {
+                LOGF_ERROR("Driver import: failed to install {} to internal storage.", fileName);
+                continue;
+            }
+
+            selectedName = fileName;
+        }
+        else if (extension == ".zip")
+        {
+            if (!ImportDriverPackage(entry.path(), turnipDir, selectedName))
+                continue;
+        }
+        else
+        {
             continue;
         }
 
-        if (!WriteWholeFile(turnipDir / fileName, driver.data(), driver.size()))
-        {
-            LOGF_ERROR("Driver import: failed to install {} to internal storage.", fileName);
-            continue;
-        }
-
-        WriteTextFile(turnipDir / "driver_name.txt", fileName.c_str());
-        WriteTextFile(turnipDir / LAST_IMPORTED_DRIVER_FILE, fileName.c_str());
+        WriteTextFile(turnipDir / "driver_name.txt", selectedName.c_str());
+        WriteTextFile(turnipDir / LAST_IMPORTED_DRIVER_FILE, selectedName.c_str());
         std::filesystem::path installedDir = importDir / "installed";
         std::filesystem::create_directories(installedDir, ec);
         std::filesystem::rename(entry.path(), installedDir / fileName, ec);
         if (ec)
             std::filesystem::remove(entry.path(), ec);
 
-        LOGF("Driver import: installed byte-for-byte and selected {}.", fileName);
+        LOGF("Driver import: installed {} and selected {}.", fileName, selectedName);
     }
 }
 
@@ -945,8 +1068,8 @@ void *AndroidGetCustomVulkanLoader()
 
             if (gpuFamily == EAndroidGpuFamily::Xclipse)
             {
-                LOG("Samsung Xclipse detected. Community Vulkan compatibility packages exist at "
-                    "https://github.com/WearyConcern1165/ExynosTools (not yet importable here; the system driver is used).");
+                LOG("Samsung Xclipse detected. A compatibility package zip from "
+                    "https://github.com/WearyConcern1165/ExynosTools can be dropped into driver_import/ to use it instead of the system driver.");
             }
 
             return nullptr;
