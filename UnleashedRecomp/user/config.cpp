@@ -785,6 +785,12 @@ void Config::CreateCallbacks()
     {
         auto displayModes = GameWindow::GetDisplayModes();
 
+        // On Android the list is empty while the native window is detached
+        // (backgrounded app); size() - 1 would underflow to -1 and read at
+        // vector data nullptr - sizeof(SDL_DisplayMode).
+        if (displayModes.empty())
+            return;
+
         // Use largest supported resolution if overflowed.
         if (def->Value >= displayModes.size())
             def->Value = displayModes.size() - 1;

@@ -486,8 +486,8 @@ void os::logger::Init()
     // Create log.txt promptly (and roll the previous one) so a tester always finds a
     // fresh file, even if this run happens to log nothing else before a freeze.
     WriteLogRecord("[logger]", nullptr, "Unleashed Recomp log started", 28);
-    static constexpr char BuildVersion[] = "=== APK VERSION: 1.5.0-roadmap-v34 (2026-07-11) ===";
-    static constexpr char BuildId[] = "ANDROID_BUILD_ID=1.5.0-roadmap-v34-driver-zip-crashlog";
+    static constexpr char BuildVersion[] = "=== APK VERSION: 1.5.1-roadmap-v36 (2026-07-12) ===";
+    static constexpr char BuildId[] = "ANDROID_BUILD_ID=1.5.1-roadmap-v36-window-size-guard";
     WriteLogRecord("[build]", nullptr, BuildVersion, sizeof(BuildVersion) - 1);
     WriteLogRecord("[build]", nullptr, BuildId, sizeof(BuildId) - 1);
     LogDeviceInfo();

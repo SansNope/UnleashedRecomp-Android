@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Fixes
+
+- Fixed a crash when applying the window-size option while the app is backgrounded: on Android the display-mode list is empty whenever the native window is detached, and the callback indexed entry `-1` of the empty list (`SIGSEGV` at `fault_addr=0xffffffffffffec` on the main thread, seen on AYN Thor in issue #27). The callback now skips the update until display modes are available again.
+- Log-file version banner now matches the released APK version; 0.3.0 builds still reported `1.5.0-roadmap-v34` in `log.txt`, which made log triage misleading.
+
+## 0.3.0 (2026-07-11)
+
 ### Unified Android launcher
 
 - Replaced the direct SDL home-screen entry with a lightweight launcher that validates the game installation before startup and provides driver/render-mode, touch-control, FPS, intro-skip, Vulkan validation and GFXReconstruct settings.
