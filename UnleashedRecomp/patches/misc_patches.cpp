@@ -3,6 +3,10 @@
 #include <ui/game_window.h>
 
 #include <atomic>
+
+#ifdef __ANDROID__
+#include <os/android/page_watch.h>
+#endif
 #include <user/achievement_manager.h>
 #include <user/persistent_storage_manager.h>
 #include <user/config.h>
@@ -218,6 +222,14 @@ PPC_FUNC(sub_82F77188)
 
         if (invalidPtr(dataA) || invalidPtr(dataB))
         {
+#ifdef __ANDROID__
+            // Watchpoint the broken data field: whoever writes that page next gets
+            // its pc logged by the crash handler (PAGEWATCH HIT lines in log.txt).
+            uint32_t brokenChild = invalidPtr(dataB) ? childB : childA;
+            if (!invalidPtr(brokenChild))
+                os::android::ArmPageWatch(base + brokenChild + 8, base + brokenChild + 8);
+#endif
+
             static std::atomic<uint32_t> s_reportCount{ 0 };
             if (s_reportCount.fetch_add(1, std::memory_order_relaxed) < 8)
             {

@@ -107,6 +107,7 @@ elseif (ANDROID)
     set(UNLEASHED_RECOMP_OS_CXX_SOURCES
         "os/android/logger_android.cpp"
         "os/android/media_android.cpp"
+        "os/android/page_watch.cpp"
         "os/android/process_android.cpp"
         "os/android/storage_android.cpp"
         "os/android/user_android.cpp"
