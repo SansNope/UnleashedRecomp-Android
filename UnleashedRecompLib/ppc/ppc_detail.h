@@ -19,6 +19,26 @@ extern "C" void PPCIndirectCallMissing(PPCContext& ctx, uint8_t* base, uint32_t 
 // pointer 0. The stock macro dereferences the function table unconditionally,
 // which for such targets reads far outside the table and jumps to garbage.
 // Validate the target range and the resolved host pointer instead of crashing.
+// DIAGNOSTIC (issue #27, TSO experiment): give every guest load acquire semantics and
+// every guest store release semantics via thread fences, emulating the x86-TSO memory
+// model the game demonstrably works under (desktop upstream) on weakly-ordered ARM64.
+// Working hypothesis: the game's lightly-synchronized structures (its free-list heap,
+// the animation registries) are safe on the in-order Xenon and on x86-TSO, but tear on
+// ARM64 - object memory observed containing other owners' data (XML text, floats where
+// vtables belong), the allocator freelist head reads as -1, and KeBugCheck fires.
+// Fences instead of ldar/stlr because guest accesses may be unaligned. Costs FPS; if
+// it eliminates the crashes, a production variant with aligned fast paths follows.
+#ifdef __ANDROID__
+#define PPC_LOAD_U8(x)  (__extension__({ uint8_t  ppcLoadV_ = *(volatile uint8_t *)(base + (x)); __atomic_thread_fence(__ATOMIC_ACQUIRE); ppcLoadV_; }))
+#define PPC_LOAD_U16(x) (__extension__({ uint16_t ppcLoadV_ = __builtin_bswap16(*(volatile uint16_t*)(base + (x))); __atomic_thread_fence(__ATOMIC_ACQUIRE); ppcLoadV_; }))
+#define PPC_LOAD_U32(x) (__extension__({ uint32_t ppcLoadV_ = __builtin_bswap32(*(volatile uint32_t*)(base + (x))); __atomic_thread_fence(__ATOMIC_ACQUIRE); ppcLoadV_; }))
+#define PPC_LOAD_U64(x) (__extension__({ uint64_t ppcLoadV_ = __builtin_bswap64(*(volatile uint64_t*)(base + (x))); __atomic_thread_fence(__ATOMIC_ACQUIRE); ppcLoadV_; }))
+#define PPC_STORE_U8(x, y)  do { __atomic_thread_fence(__ATOMIC_RELEASE); *(volatile uint8_t *)(base + (x)) = (y); } while (0)
+#define PPC_STORE_U16(x, y) do { __atomic_thread_fence(__ATOMIC_RELEASE); *(volatile uint16_t*)(base + (x)) = __builtin_bswap16(y); } while (0)
+#define PPC_STORE_U32(x, y) do { __atomic_thread_fence(__ATOMIC_RELEASE); *(volatile uint32_t*)(base + (x)) = __builtin_bswap32(y); } while (0)
+#define PPC_STORE_U64(x, y) do { __atomic_thread_fence(__ATOMIC_RELEASE); *(volatile uint64_t*)(base + (x)) = __builtin_bswap64(y); } while (0)
+#endif
+
 // The valid range spans to the image end, not just the code section: kernel import
 // thunks live directly after the code (first at exactly PPC_CODE_BASE+PPC_CODE_SIZE)
 // and are registered into the function table by Memory::InsertFunction.
