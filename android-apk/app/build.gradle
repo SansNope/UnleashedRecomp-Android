@@ -16,8 +16,8 @@ android {
     defaultConfig {
         minSdkVersion 29
         targetSdkVersion 34
-        versionCode 8
-        versionName "1.4.2-roadmap-v32"
+        versionCode 9
+        versionName "1.5.0-roadmap-v34"
         externalNativeBuild {
             ndkBuild {
                 arguments "APP_PLATFORM=android-29"
