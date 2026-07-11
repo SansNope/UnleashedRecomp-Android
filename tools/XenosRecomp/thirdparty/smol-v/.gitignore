@@ -1,0 +1,8 @@
+xcuserdata
+.vs
+*.sdf
+*.VC.opendb
+*.vcxproj.user
+projects/visualstudio2015/build
+*-got.spirv
+/out/
