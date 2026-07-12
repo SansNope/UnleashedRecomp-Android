@@ -9,6 +9,8 @@
 
 #ifdef __ANDROID__
 #include <os/android/page_watch.h>
+#include <os/android/storage_android.h>
+#include <cstdlib>
 #include <dlfcn.h>
 #include <unistd.h>
 #endif
@@ -499,18 +501,92 @@ PPC_FUNC(sub_82EA8AB0)
 // still succeeded. Ours: lookups on freed memory correctly no-op.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Race reproduction harness (local testing only, marker-file gated).
+//
+// The issue #27 race window is "an entity is destroyed while its pair entries
+// sit in the drain queues" - normally microseconds wide, which is why it
+// never reproduces on our devices. repro_race.txt stretches the window by
+// sleeping a few milliseconds at the drain entry, letting a mid-range tablet
+// reproduce what AYN handhelds hit naturally. repro_nofilter.txt disables the
+// pair filter for A/B validation: race+nofilter should crash exactly like the
+// tester devices; race+filter should survive with "dropped agent creation"
+// lines. Both markers are read once, from the external driver_import folder
+// or the internal files dir (the latter is creatable via run-as).
+// ---------------------------------------------------------------------------
+
+static bool ReproMarker(const char* name)
+{
+    std::error_code ec;
+    return std::filesystem::exists(os::android::GetExternalFilesDir() / "driver_import" / name, ec) ||
+           std::filesystem::exists(os::android::GetInternalFilesDir() / name, ec);
+}
+
+static bool ReproRaceEnabled()
+{
+    static bool s_enabled = []
+    {
+        bool enabled = ReproMarker("repro_race.txt");
+        if (enabled)
+            LOG_ERROR("REPRO: drain delay perturbation enabled (repro_race.txt).");
+        return enabled;
+    }();
+    return s_enabled;
+}
+
+static bool ReproFilterDisabled()
+{
+    static bool s_disabled = []
+    {
+        bool disabled = ReproMarker("repro_nofilter.txt");
+        if (disabled)
+            LOG_ERROR("REPRO: pair filter DISABLED (repro_nofilter.txt).");
+        return disabled;
+    }();
+    return s_disabled;
+}
+
+// Pair-queue drain: the perturbation point. Sleeping here stretches the
+// enqueue-to-drain window from microseconds to milliseconds.
+PPC_FUNC_IMPL(__imp__sub_82EF2348);
+PPC_FUNC(sub_82EF2348)
+{
+    if (ReproRaceEnabled())
+        usleep(2000 + (rand() % 6000));
+
+    __imp__sub_82EF2348(ctx, base);
+}
+
 // Agent factory (r3/r4 = shape entries inside the two collidables). Never
-// create an agent for a destroyed pair member.
+// create an agent for a destroyed pair member. diag19's six tester logs
+// proved the entry pointers themselves are never quarantined (0 hits), while
+// diag8 event ordering proved agents are still born after a node's death:
+// the collidable outlives its animation/physics node, and the factory takes
+// that node from entry+184 (the same field the enqueue dedup compares). Check
+// those node pointers, not just the entries.
 PPC_FUNC_IMPL(__imp__sub_82EF5680);
 PPC_FUNC(sub_82EF5680)
 {
-    if (IsQuarantined(ctx.r3.u32) || IsQuarantined(ctx.r4.u32))
+    if (!ReproFilterDisabled())
     {
-        static std::atomic<uint32_t> s_dropCount{ 0 };
-        if (s_dropCount.fetch_add(1, std::memory_order_relaxed) < 16)
-            LOGFN_ERROR("sub_82EF5680: dropped agent creation for destroyed pair (a={:08X} b={:08X})", ctx.r3.u32, ctx.r4.u32);
-        ctx.r3.u32 = 0;
-        return;
+        auto entryNodeDead = [&](uint32_t entry)
+        {
+            if (IsQuarantined(entry))
+                return true;
+            if (entry < 0x1000 || entry >= 0xFFFF0000)
+                return false; // malformed entry: let the original code decide
+            uint32_t node = PPC_LOAD_U32(entry + 184);
+            return node != 0 && IsQuarantined(node);
+        };
+
+        if (entryNodeDead(ctx.r3.u32) || entryNodeDead(ctx.r4.u32))
+        {
+            static std::atomic<uint32_t> s_dropCount{ 0 };
+            if (s_dropCount.fetch_add(1, std::memory_order_relaxed) < 16)
+                LOGFN_ERROR("sub_82EF5680: dropped agent creation for destroyed pair (a={:08X} b={:08X})", ctx.r3.u32, ctx.r4.u32);
+            ctx.r3.u32 = 0;
+            return;
+        }
     }
 
     __imp__sub_82EF5680(ctx, base);
@@ -521,7 +597,8 @@ PPC_FUNC(sub_82EF5680)
 PPC_FUNC_IMPL(__imp__sub_82F760A8);
 PPC_FUNC(sub_82F760A8)
 {
-    if (IsQuarantined(ctx.r3.u32) || IsQuarantined(ctx.r4.u32))
+    if (!ReproFilterDisabled() &&
+        (IsQuarantined(ctx.r3.u32) || IsQuarantined(ctx.r4.u32)))
     {
         ctx.r3.u32 = 0;
         return;
