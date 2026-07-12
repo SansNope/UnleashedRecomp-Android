@@ -6,6 +6,8 @@
 
 #ifdef __ANDROID__
 #include <os/android/page_watch.h>
+#include <dlfcn.h>
+#include <unistd.h>
 #endif
 #include <user/achievement_manager.h>
 #include <user/persistent_storage_manager.h>
@@ -201,6 +203,173 @@ PPC_FUNC(sub_824EE620)
     ctx.r3.u32 = PersistentStorageManager::ShouldDisplayDLCMessage(true);
 }
 
+#ifdef __ANDROID__
+
+// issue #27 diag8: lifetime tracking for the game's small-block allocator.
+//
+// sub_82EA8A30 is the guest bucketed freelist allocator (Havok hkThreadMemory
+// layout: per-thread instance fetched from TLS, lock-free bucket pop) and
+// sub_82EA8AB0 is its free counterpart. The diag7 page watch showed a buffer
+// allocated through sub_82EA8A30 (by sub_82BB5870, count*48 bytes) being
+// copied right over a live animation node 16 bytes above it — i.e. the
+// allocator handed out overlapping blocks. This tracker records every
+// alloc/free in a ring buffer and keeps a live-block bitmap so the moment a
+// block is handed out twice we log both owners, and the evaluator guard can
+// print the full lifetime history of the broken node's memory.
+
+namespace
+{
+    constexpr uint32_t TRACK_LIMIT = 0x20000000; // 360 had 512 MB; game heap lives below this
+    constexpr size_t EVT_CAP = 1 << 16;
+
+    struct AllocEvent
+    {
+        uint32_t addr;
+        uint32_t size;
+        uint32_t ra;  // host return address as libmain offset (symbolizable to sub_XXXXXXXX)
+        uint16_t tid;
+        uint8_t op;   // 1 = alloc, 2 = free
+        uint8_t pad;
+    };
+
+    AllocEvent s_events[EVT_CAP];
+    std::atomic<uint64_t> s_evtIdx{ 0 };
+
+    // One bit per 8-byte granule (allocator rounds sizes to 8): 8 MB.
+    std::atomic<uint64_t> s_liveBits[TRACK_LIMIT / 8 / 64];
+
+    uintptr_t TrackModuleBase()
+    {
+        static uintptr_t s_base = []
+        {
+            Dl_info info{};
+            dladdr((void*)&TrackModuleBase, &info);
+            return (uintptr_t)info.dli_fbase;
+        }();
+        return s_base;
+    }
+
+    uint16_t TrackTid()
+    {
+        static thread_local uint16_t t_tid = (uint16_t)gettid();
+        return t_tid;
+    }
+
+    void RecordAllocEvent(uint32_t addr, uint32_t size, uint32_t ra, uint8_t op)
+    {
+        uint64_t i = s_evtIdx.fetch_add(1, std::memory_order_relaxed);
+        AllocEvent& e = s_events[i & (EVT_CAP - 1)];
+        e.addr = addr;
+        e.size = size;
+        e.ra = ra;
+        e.tid = TrackTid();
+        e.op = op;
+    }
+
+    // Returns true when setting bits that were already set: the allocator handed
+    // out memory overlapping a still-live tracked block.
+    bool MarkLiveRange(uint32_t addr, uint32_t size, bool set)
+    {
+        if (addr == 0 || size == 0 || size > 0x100000 || addr >= TRACK_LIMIT || size > TRACK_LIMIT - addr)
+            return false;
+
+        uint32_t g0 = addr >> 3;
+        uint32_t g1 = (addr + size - 1) >> 3;
+        bool overlap = false;
+
+        for (uint32_t w = g0 / 64; w <= g1 / 64; w++)
+        {
+            uint32_t bs = (w == g0 / 64) ? g0 % 64 : 0;
+            uint32_t be = (w == g1 / 64) ? g1 % 64 : 63;
+            uint64_t mask = (be == 63 ? ~0ull : ((1ull << (be + 1)) - 1)) & ~((1ull << bs) - 1);
+
+            if (set)
+            {
+                if (s_liveBits[w].fetch_or(mask, std::memory_order_relaxed) & mask)
+                    overlap = true;
+            }
+            else
+            {
+                s_liveBits[w].fetch_and(~mask, std::memory_order_relaxed);
+            }
+        }
+
+        return overlap;
+    }
+
+    void DumpAllocHistory(uint32_t target, uint32_t range, const char* tag)
+    {
+        uint64_t end = s_evtIdx.load(std::memory_order_acquire);
+        uint64_t begin = end > EVT_CAP ? end - EVT_CAP : 0;
+        int printed = 0;
+
+        for (uint64_t i = begin; i < end && printed < 24; i++)
+        {
+            const AllocEvent& e = s_events[i & (EVT_CAP - 1)];
+            uint32_t sz = e.size ? e.size : 1;
+            if (e.addr < target + range && target < e.addr + sz)
+            {
+                LOGF_ERROR("ALLOCTRACK[{}] #{} {} addr={:08X} size={} tid={} ra=libmain+0x{:X}",
+                    tag, i, e.op == 1 ? "alloc" : "free ", e.addr, e.size, e.tid, e.ra);
+                printed++;
+            }
+        }
+
+        if (printed == 0)
+            LOGF_ERROR("ALLOCTRACK[{}] no recorded events touch {:08X}", tag, target);
+    }
+
+    void TrackAlloc(uint32_t addr, uint32_t size, uint32_t ra)
+    {
+        RecordAllocEvent(addr, size, ra, 1);
+
+        if (MarkLiveRange(addr, size, true))
+        {
+            static std::atomic<uint32_t> s_dblCount{ 0 };
+            if (s_dblCount.fetch_add(1, std::memory_order_relaxed) < 16)
+            {
+                LOGF_ERROR("ALLOCTRACK double allocation: {:08X}+{} handed out while still live "
+                    "(tid={} ra=libmain+0x{:X})", addr, size, TrackTid(), ra);
+                DumpAllocHistory(addr, size, "double");
+            }
+        }
+    }
+
+    void TrackFree(uint32_t addr, uint32_t size, uint32_t ra)
+    {
+        RecordAllocEvent(addr, size, ra, 2);
+        MarkLiveRange(addr, size, false);
+    }
+}
+
+// Guest small-block allocate(heap r3, size r4) -> r3.
+PPC_FUNC_IMPL(__imp__sub_82EA8A30);
+PPC_FUNC(sub_82EA8A30)
+{
+    uint32_t size = ctx.r4.u32;
+    uintptr_t ra = (uintptr_t)__builtin_return_address(0);
+
+    __imp__sub_82EA8A30(ctx, base);
+
+    TrackAlloc(ctx.r3.u32, size, (uint32_t)(ra - TrackModuleBase()));
+}
+
+// Guest small-block free(heap r3, ptr r4, size r5).
+PPC_FUNC_IMPL(__imp__sub_82EA8AB0);
+PPC_FUNC(sub_82EA8AB0)
+{
+    uint32_t addr = ctx.r4.u32;
+    uint32_t size = ctx.r5.u32;
+    uintptr_t ra = (uintptr_t)__builtin_return_address(0);
+
+    if (addr != 0)
+        TrackFree(addr, size, (uint32_t)(ra - TrackModuleBase()));
+
+    __imp__sub_82EA8AB0(ctx, base);
+}
+
+#endif
+
 // Animation node evaluator. The function dispatches on a type byte at +0; the type-4
 // branch interpolates between two child nodes (+16 / +20) and dereferences each child's
 // data pointer at +8 without validating it. On some devices (issue #27: Snapdragon
@@ -236,6 +405,16 @@ PPC_FUNC(sub_82F77188)
                 LOGFN_ERROR("sub_82F77188: skipping type-4 node with invalid data "
                     "(this={:08X} childA={:08X} dataA={:08X} childB={:08X} dataB={:08X})",
                     ctx.r3.u32, childA, dataA, childB, dataB);
+
+#ifdef __ANDROID__
+                // diag8: print the allocation lifetime of the broken child node
+                // and its parent, so we can tell use-after-free (freed, then the
+                // memory re-handed to someone else) from double allocation.
+                uint32_t brokenNode = invalidPtr(dataB) ? childB : childA;
+                if (!invalidPtr(brokenNode))
+                    DumpAllocHistory(brokenNode, 48, "node");
+                DumpAllocHistory(ctx.r3.u32, 48, "parent");
+#endif
             }
 
             return;
