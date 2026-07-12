@@ -656,11 +656,19 @@ PPC_FUNC(sub_82F764C8)
 // Family destructor: deliver the missing parent notification before the
 // object dies. Layout guards keep this a no-op for family members that do
 // not carry a registration table.
+//
+// Offset note (the diag21 lesson, notified=0 in every log): parents do not
+// reference the object base r3 - every broken child pointer in every log is
+// base+0x10 (090E4D10 in block 090E4D00, 0A6A3510 in 0A6A3500, ...). The
+// node lives embedded at +0x10, so its registration table pointer sits at
+// object+0x5C - which is exactly the field the very first crashes of this
+// issue faulted on (reads of guest 0x5C through a null node).
 PPC_FUNC_IMPL(__imp__sub_82ED4BB8);
 PPC_FUNC(sub_82ED4BB8)
 {
-    const uint32_t dying = ctx.r3.u32;
-    if (dying >= 0x1000 && dying < 0xFFFF0000)
+    const uint32_t dyingObject = ctx.r3.u32;
+    const uint32_t dying = dyingObject + 0x10; // the node parents point at
+    if (dyingObject >= 0x1000 && dyingObject < 0xFFFF0000)
     {
         uint32_t table = PPC_LOAD_U32(dying + 76);
         uint32_t count = PPC_LOAD_U32(dying + 80);
