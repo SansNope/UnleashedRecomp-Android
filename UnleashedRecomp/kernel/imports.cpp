@@ -726,7 +726,18 @@ void RtlFillMemoryUlong()
 
 void KeBugCheckEx()
 {
+#ifdef __ANDROID__
+    // The game's CRT assert handler funnels here (issue #27): with destroyed
+    // animation nodes skipped by the guards, the pose validator notices the
+    // incomplete output and asserts. The guest code restores its stack and
+    // returns normally when the bugcheck comes back, so surviving it costs one
+    // imperfect pose frame instead of the process. Kept fatal on desktop.
+    static std::atomic<uint32_t> s_reportCount{ 0 };
+    if (s_reportCount.fetch_add(1, std::memory_order_relaxed) < 16)
+        LOG_ERROR("KeBugCheckEx reached; continuing (guest assert survived).");
+#else
     __builtin_debugtrap();
+#endif
 }
 
 uint32_t KeGetCurrentProcessType()
@@ -982,7 +993,14 @@ void VdEnableDisableClockGating()
 
 void KeBugCheck()
 {
+#ifdef __ANDROID__
+    // See KeBugCheckEx: the guest assert path survives a returning bugcheck.
+    static std::atomic<uint32_t> s_reportCount{ 0 };
+    if (s_reportCount.fetch_add(1, std::memory_order_relaxed) < 16)
+        LOG_ERROR("KeBugCheck reached; continuing (guest assert survived).");
+#else
     __builtin_debugtrap();
+#endif
 }
 
 void KeLockL2()
