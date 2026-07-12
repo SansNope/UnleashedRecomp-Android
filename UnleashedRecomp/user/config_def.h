@@ -92,6 +92,7 @@ CONFIG_DEFINE("Video", uint32_t, AnisotropicFiltering, 16);
 #endif
 CONFIG_DEFINE_ENUM_LOCALISED("Video", EShadowResolution, ShadowResolution, EShadowResolution::x4096);
 CONFIG_DEFINE_ENUM_LOCALISED("Video", ETextureQuality, TextureQuality, ETextureQuality::Full);
+CONFIG_DEFINE_LOCALISED("Video", bool, PlanarReflections, true);
 CONFIG_DEFINE_ENUM_LOCALISED("Video", EGITextureFiltering, GITextureFiltering, EGITextureFiltering::Bicubic);
 CONFIG_DEFINE_ENUM("Video", EDepthOfFieldQuality, DepthOfFieldQuality, EDepthOfFieldQuality::Auto);
 #ifdef __ANDROID__

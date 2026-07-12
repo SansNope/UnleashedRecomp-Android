@@ -141,3 +141,27 @@ PPC_FUNC(sub_82E38650)
 
     __imp__sub_82E38650(ctx, base);
 }
+
+// Planar reflection pass gate (virtual, reached via vtable). The function reads
+// the global reflection-enable flag at 0x832FA0D8 first thing and takes the
+// "no reflections in this scene" early-out when it is zero - the exact path
+// every stage without reflective surfaces already takes. With the option off,
+// present that zero to just this function, skipping the reflection scene pass
+// without disturbing the flag for the rest of the engine (pipeline compilation
+// on the host reads it too).
+PPC_FUNC_IMPL(__imp__sub_82BAC240);
+PPC_FUNC(sub_82BAC240)
+{
+    auto* reflectionFlag = (uint8_t*)g_memory.Translate(0x832FA0D8);
+
+    if (!Config::PlanarReflections && *reflectionFlag != 0)
+    {
+        uint8_t saved = *reflectionFlag;
+        *reflectionFlag = 0;
+        __imp__sub_82BAC240(ctx, base);
+        *reflectionFlag = saved;
+        return;
+    }
+
+    __imp__sub_82BAC240(ctx, base);
+}

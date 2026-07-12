@@ -784,6 +784,16 @@ CONFIG_DEFINE_ENUM_LOCALE(EShadowResolution)
     }
 };
 
+CONFIG_DEFINE_LOCALE(PlanarReflections)
+{
+    { ELanguage::English,  { "Planar Reflections", "Render real-time reflections on reflective surfaces. Turning this off skips a whole scene render pass on stages that use them." } },
+    { ELanguage::Japanese, { "[平面:へいめん]リフレクション", "[反射面:はんしゃめん]のリアルタイム[反射:はんしゃ]を​レンダリングします" } },
+    { ELanguage::German,   { "Planare Reflexionen", "Rendere Echtzeit-Reflexionen auf spiegelnden Oberflächen. Das Deaktivieren spart einen ganzen Szenen-Renderdurchlauf auf Leveln, die sie verwenden." } },
+    { ELanguage::French,   { "Réflexions planaires", "Affiche des réflexions en temps réel sur les surfaces réfléchissantes. Désactiver cette option évite tout un rendu de scène sur les niveaux qui les utilisent." } },
+    { ELanguage::Spanish,  { "Reflejos planares", "Renderiza reflejos en tiempo real en las superficies reflectantes. Desactivarlo ahorra una pasada completa de renderizado en las fases que los usan." } },
+    { ELanguage::Italian,  { "Riflessi planari", "Renderizza riflessi in tempo reale sulle superfici riflettenti. Disattivandolo si salta un\'intera passata di rendering nei livelli che li usano." } }
+};
+
 CONFIG_DEFINE_LOCALE(TextureQuality)
 {
     { ELanguage::English,  { "Texture Quality", "Reduce the resolution of game textures to save GPU memory and bandwidth. Applies to textures as they load; restart the stage to see the change." } },

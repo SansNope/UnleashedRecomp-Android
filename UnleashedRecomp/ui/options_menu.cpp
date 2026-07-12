@@ -1298,6 +1298,7 @@ static void DrawConfigOptions()
             DrawConfigOption(rowCount++, yOffset, &Config::TransparencyAntiAliasing, Config::AntiAliasing != EAntiAliasing::None, &Localise("Options_Desc_NotAvailableMSAA"));
             DrawConfigOption(rowCount++, yOffset, &Config::ShadowResolution, true);
             DrawConfigOption(rowCount++, yOffset, &Config::TextureQuality, true);
+            DrawConfigOption(rowCount++, yOffset, &Config::PlanarReflections, true);
             DrawConfigOption(rowCount++, yOffset, &Config::GITextureFiltering, true);
             DrawConfigOption(rowCount++, yOffset, &Config::MotionBlur, true);
             DrawConfigOption(rowCount++, yOffset, &Config::XboxColorCorrection, true);
