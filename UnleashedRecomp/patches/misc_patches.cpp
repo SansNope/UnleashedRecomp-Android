@@ -354,8 +354,14 @@ namespace
     // invalid and skips deterministically. If the ring crash disappears (or its
     // frequency collapses) with this build, the use-after-free chain is proven
     // end to end.
-    constexpr size_t QUAR_CAP = 1024;
-    constexpr uint32_t QUAR_MAX_SIZE = 512;
+    // All sizes this allocator serves are quarantined: tester logs kept finding
+    // stale references into blocks above the previous 512-byte cutoff (the
+    // count*48 transform buffers reach 13792 bytes), showing up as float data
+    // overwriting live nodes and poison pointers landing in CRT lock lists.
+    // A byte budget bounds the held memory per guest thread.
+    constexpr size_t QUAR_CAP = 4096;
+    constexpr uint32_t QUAR_MAX_SIZE = 64 * 1024;
+    constexpr uint64_t QUAR_MAX_BYTES = 8ull * 1024 * 1024;
 
     struct QuarantinedFree
     {
@@ -367,6 +373,7 @@ namespace
     thread_local QuarantinedFree t_quarantine[QUAR_CAP];
     thread_local size_t t_quarantineHead = 0;
     thread_local size_t t_quarantineCount = 0;
+    thread_local uint64_t t_quarantineBytes = 0;
 }
 
 // Guest small-block allocate(heap r3, size r4) -> r3.
@@ -399,11 +406,14 @@ PPC_FUNC(sub_82EA8AB0)
     {
         memset(base + addr, 0xFF, size);
 
-        if (t_quarantineCount == QUAR_CAP)
+        // Evict oldest entries until both the slot and the byte budget fit.
+        while (t_quarantineCount == QUAR_CAP ||
+               (t_quarantineCount > 0 && t_quarantineBytes + size > QUAR_MAX_BYTES))
         {
             const QuarantinedFree oldest = t_quarantine[t_quarantineHead];
             t_quarantineHead = (t_quarantineHead + 1) % QUAR_CAP;
             t_quarantineCount--;
+            t_quarantineBytes -= oldest.size;
 
             ctx.r3.u32 = oldest.heap;
             ctx.r4.u32 = oldest.addr;
@@ -413,6 +423,7 @@ PPC_FUNC(sub_82EA8AB0)
 
         t_quarantine[(t_quarantineHead + t_quarantineCount) % QUAR_CAP] = { heap, addr, size };
         t_quarantineCount++;
+        t_quarantineBytes += size;
         return;
     }
 
