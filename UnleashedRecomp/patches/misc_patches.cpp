@@ -403,15 +403,18 @@ PPC_FUNC(sub_82EA8AB0)
     // The heap instance is per-thread (fetched from TLS by the guest code), so
     // deferring a free and completing it later from the same thread is safe.
     //
-    // The block contents are deliberately left INTACT (no poison): guest code
-    // races object teardown with whole read-modify-write sequences (evaluator,
-    // node clone, pool flusher, pool grow, CRT locks - five sites found so
-    // far), and poisoned memory turns each of those into a new crash site.
-    // The Xbox 360 tolerated this exact race because freed memory kept its
-    // contents until reuse; deferring reuse recreates that behaviour, so stale
-    // code sees consistent stale data and dies off naturally within frames.
+    // Poison and the arena absorber work as a pair. Without poison, freed
+    // blocks keep plausible stale pointers and racing teardown code follows
+    // those chains for multiple hops, eventually writing through memory that
+    // was reused at another allocator level (o1heap fragment headers died
+    // this way). Poison cuts every stale chain at its first hop, and the
+    // absorber region past the arena end turns that cut - a dereference of
+    // 0xFFFFFFFF plus a field offset - into a harmless read of zeros or a
+    // write into scratch instead of a crash.
     if (addr != 0 && size > 0 && size <= QUAR_MAX_SIZE)
     {
+        memset(base + addr, 0xFF, size);
+
         // Evict oldest entries until both the slot and the byte budget fit.
         while (t_quarantineCount == QUAR_CAP ||
                (t_quarantineCount > 0 && t_quarantineBytes + size > QUAR_MAX_BYTES))
