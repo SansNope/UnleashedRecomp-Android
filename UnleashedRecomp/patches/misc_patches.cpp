@@ -375,6 +375,38 @@ namespace
     thread_local size_t t_quarantineHead = 0;
     thread_local size_t t_quarantineCount = 0;
     thread_local uint64_t t_quarantineBytes = 0;
+
+    // Global quarantine membership bitmap (one bit per 8-byte granule of the
+    // first 512MB, like s_liveBits). The collision-pair hooks below use it to
+    // recognise pointers into destroyed objects without touching the poison.
+    std::atomic<uint64_t> s_quarBits[TRACK_LIMIT / 8 / 64];
+
+    void MarkQuarantined(uint32_t addr, uint32_t size, bool set)
+    {
+        if (addr == 0 || size == 0 || addr >= TRACK_LIMIT || size > TRACK_LIMIT - addr)
+            return;
+
+        uint32_t g0 = addr >> 3;
+        uint32_t g1 = (addr + size - 1) >> 3;
+        for (uint32_t w = g0 / 64; w <= g1 / 64; w++)
+        {
+            uint32_t bs = (w == g0 / 64) ? g0 % 64 : 0;
+            uint32_t be = (w == g1 / 64) ? g1 % 64 : 63;
+            uint64_t mask = (be == 63 ? ~0ull : ((1ull << (be + 1)) - 1)) & ~((1ull << bs) - 1);
+            if (set)
+                s_quarBits[w].fetch_or(mask, std::memory_order_relaxed);
+            else
+                s_quarBits[w].fetch_and(~mask, std::memory_order_relaxed);
+        }
+    }
+
+    bool IsQuarantined(uint32_t addr)
+    {
+        if (addr == 0 || addr >= TRACK_LIMIT)
+            return false;
+        uint32_t g = addr >> 3;
+        return (s_quarBits[g / 64].load(std::memory_order_relaxed) >> (g % 64)) & 1;
+    }
 }
 
 // Guest small-block allocate(heap r3, size r4) -> r3.
@@ -415,6 +447,7 @@ PPC_FUNC(sub_82EA8AB0)
     if (addr != 0 && size > 0 && size <= QUAR_MAX_SIZE)
     {
         memset(base + addr, 0xFF, size);
+        MarkQuarantined(addr, size, true);
 
         // Evict oldest entries until both the slot and the byte budget fit.
         while (t_quarantineCount == QUAR_CAP ||
@@ -424,6 +457,7 @@ PPC_FUNC(sub_82EA8AB0)
             t_quarantineHead = (t_quarantineHead + 1) % QUAR_CAP;
             t_quarantineCount--;
             t_quarantineBytes -= oldest.size;
+            MarkQuarantined(oldest.addr, oldest.size, false);
 
             ctx.r3.u32 = oldest.heap;
             ctx.r4.u32 = oldest.addr;
@@ -438,6 +472,62 @@ PPC_FUNC(sub_82EA8AB0)
     }
 
     __imp__sub_82EA8AB0(ctx, base);
+}
+
+// ---------------------------------------------------------------------------
+// Collision-pair drain hooks (issue #27, the mechanism-level fix).
+//
+// During a physics step, pair add/removes are queued as raw collidable
+// pointers (sub_82EF18B0 / sub_82EF19F0) and drained later by sub_82EF2348.
+// Nothing pins the entities, so a pair member can be destroyed while its
+// entries still sit in the queues. The drain then does two fatal things:
+//
+//  - sub_82EF5680 CREATES an agent for a queued add whose collidable is
+//    already freed - the agent is born dangling, gets registered into the
+//    live partner's slot table, is evaluated immediately (the original ring
+//    crash) and can never be removed, because its identity lives in freed
+//    memory. These undead agents are the "references that outlive seconds".
+//
+//  - sub_82F760A8 looks an agent up for a queued remove by walking the
+//    collidable's slot table at +76/+80; on a freed collidable the walk
+//    reads poison and silently returns "not found".
+//
+// Both drain call sites handle a null result gracefully, so recognising
+// destroyed pair members via the quarantine bitmap and returning null endows
+// the drain with exactly the tolerance the Xbox 360's intact-memory timing
+// used to provide. The Xbox behaviour: lookups on freed-but-intact memory
+// still succeeded. Ours: lookups on freed memory correctly no-op.
+// ---------------------------------------------------------------------------
+
+// Agent factory (r3/r4 = shape entries inside the two collidables). Never
+// create an agent for a destroyed pair member.
+PPC_FUNC_IMPL(__imp__sub_82EF5680);
+PPC_FUNC(sub_82EF5680)
+{
+    if (IsQuarantined(ctx.r3.u32) || IsQuarantined(ctx.r4.u32))
+    {
+        static std::atomic<uint32_t> s_dropCount{ 0 };
+        if (s_dropCount.fetch_add(1, std::memory_order_relaxed) < 16)
+            LOGFN_ERROR("sub_82EF5680: dropped agent creation for destroyed pair (a={:08X} b={:08X})", ctx.r3.u32, ctx.r4.u32);
+        ctx.r3.u32 = 0;
+        return;
+    }
+
+    __imp__sub_82EF5680(ctx, base);
+}
+
+// Agent lookup by pair (walks u32[coll+76] slot table, count at +80). Miss
+// fast on destroyed members instead of walking poisoned tables.
+PPC_FUNC_IMPL(__imp__sub_82F760A8);
+PPC_FUNC(sub_82F760A8)
+{
+    if (IsQuarantined(ctx.r3.u32) || IsQuarantined(ctx.r4.u32))
+    {
+        ctx.r3.u32 = 0;
+        return;
+    }
+
+    __imp__sub_82F760A8(ctx, base);
 }
 
 #endif
