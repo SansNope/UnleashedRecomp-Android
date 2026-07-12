@@ -1,0 +1,94 @@
+<resources>
+    <string name="app_name">UnleashedRecomp</string>
+    <string name="documents_game_title">Unleashed Recomp ゲームファイル</string>
+    <string name="documents_game_summary">ゲーム本体、MOD、設定、セーブデータ</string>
+    <string name="documents_transfer_title">Unleashed Recomp 転送フォルダー</string>
+    <string name="documents_transfer_summary">MOD、ドライバーのインポート、ログ、診断キャプチャ</string>
+    <string name="mod_manager_launcher_name">Unleashed MOD</string>
+    <string name="mod_manager_title">Unleashed MOD</string>
+    <string name="mod_manager_hint">各MODフォルダーを mods ディレクトリにコピーし、このリストを更新して、MODを有効化し優先順位を並べ替えてください。保存すると標準の CPKREDIR データベースに書き込まれます。変更の適用にはゲームの再起動が必要です。</string>
+    <string name="mod_manager_open_files">ファイルを開く</string>
+    <string name="mod_manager_refresh">更新</string>
+    <string name="mod_manager_save">MODリストを保存</string>
+    <string name="mod_manager_empty">互換性のある mod.ini が見つかりません。「フォルダーを開く」で mods/ を作成し、HMM または UMM のMODをコピーしてください。</string>
+    <string name="mod_manager_found">互換性のあるMODが %1$d 件見つかりました。</string>
+    <string name="mod_manager_saved">有効なMOD %1$d 件を優先順位順に保存しました。</string>
+    <string name="mod_manager_restart">MODの変更はゲームの再起動後に適用されます。</string>
+    <string name="mod_manager_error_directory">設定ディレクトリを作成できません: %1$s</string>
+    <string name="mod_manager_error_save">MODデータベースを保存できません: %1$s</string>
+    <string name="mod_manager_error_files">Android のファイルアプリを開けませんでした。</string>
+
+    <string name="launcher_title">Unleashed Recomp</string>
+    <string name="launcher_subtitle">起動前にインストール状態を確認し、ゲームを設定してください。</string>
+    <string name="launcher_game_files">ゲームファイル</string>
+    <string name="launcher_open_files">ゲームフォルダーを開く</string>
+    <string name="launcher_recheck">再確認</string>
+    <string name="launcher_graphics">グラフィックドライバー</string>
+    <string name="launcher_driver">Vulkan ドライバー</string>
+    <string name="launcher_render_mode">Turnip レンダーモード</string>
+    <string name="launcher_import_driver">.so / .zip をインポート</string>
+    <string name="launcher_driver_folder">ドライバーフォルダー</string>
+    <string name="launcher_controls">操作</string>
+    <string name="launcher_touch_policy">画面上のコントロール</string>
+    <string name="launcher_touch_camera">カメラ操作</string>
+    <string name="launcher_edit_layout">タッチコントロールの配置</string>
+    <string name="launcher_mods">MOD</string>
+    <string name="launcher_mods_summary">互換性のある HMM/UMM MOD を有効化し、優先順位を設定します。</string>
+    <string name="launcher_manage_mods">MODの管理</string>
+    <string name="launcher_debug">デバッグオプション</string>
+    <string name="launcher_show_fps">FPS を表示</string>
+    <string name="launcher_show_profiler">プロファイラーオーバーレイを表示</string>
+    <string name="launcher_skip_intro">オープニングロゴをスキップ</string>
+    <string name="launcher_validation">Vulkan 同期検証（低速）</string>
+    <string name="launcher_gfx_capture">GFXReconstruct トレースを記録（非常に大きく低速）</string>
+    <string name="launcher_open_logs">ログとキャプチャを開く</string>
+    <string name="launcher_play">ゲームを起動</string>
+    <string name="launcher_driver_pending">%1$d 個のドライバーパッケージが次回起動時にインストールされます。</string>
+    <string name="launcher_driver_installed">インポート済みドライバー: %1$s</string>
+    <string name="launcher_driver_builtin">同梱の Turnip ドライバーとシステムドライバーが利用可能です。インポート済みドライバーはありません。</string>
+    <string name="launcher_driver_recovery">前回の Vulkan 起動が完了しませんでした。自動リカバリーがより安全なドライバーを使用します。問題が繰り返す場合はここで「システム」を選択してください。</string>
+    <string name="launcher_log_found">最新のログが見つかりました（%1$s）。</string>
+    <string name="launcher_log_missing">まだログはありません。ログはゲーム開始時に作成されます。</string>
+    <string name="game_ready_all_dlc">起動できます。ゲーム本体、アップデート、すべてのDLCを検出しました。</string>
+    <string name="game_ready_missing_dlc">起動できます。ゲーム本体とアップデートを検出。DLCパック: %1$d / %2$d。</string>
+    <string name="error_title">続行できません</string>
+    <string name="error_storage_create">アプリはストレージフォルダーを作成できません:\n%1$s\n\n空き容量とストレージの状態を確認してください。</string>
+    <string name="error_storage_write">ゲームフォルダーに書き込めません:\n%1$s\n\nadb や別のユーザーによって作成された可能性があります。削除してアプリに再作成させてください。</string>
+    <string name="error_game_missing">ゲームファイルがインストールされていません。展開した Xbox 360 ダンプの game、update、patched フォルダーを次の場所にコピーしてください:\n%1$s\n\nAPK、PC版ファイル、ショートカットはコピーしないでください。</string>
+    <string name="error_game_partial">インストールが不完全か破損しています。不足している必須ファイル:%1$s\n\n想定されるルート:\n%2$s</string>
+    <string name="error_game_nested">ゲームファイルが誤ったフォルダー（%1$s）に入れ子になっているようです。game、update、patched および任意の dlc フォルダーを直接次の場所に移動してください:\n%2$s</string>
+    <string name="error_settings_save">設定を保存できませんでした: %1$s</string>
+    <string name="error_layout_editor">レイアウトエディターを開始できませんでした: %1$s</string>
+    <string name="error_layout_requires_game">レイアウトエディターはゲームのレンダラーを使用するため、有効なゲームのインストールが必要です。</string>
+    <string name="error_driver_extension">Vulkan の .so ファイル、または AdrenoTools/ExynosTools の .zip パッケージを選択してください。</string>
+    <string name="error_driver_copy">ドライバーをインポートできませんでした: %1$s</string>
+    <string name="error_open_files">Android のファイルアプリでアプリのフォルダーを開けませんでした。</string>
+    <string name="driver_imported">%1$s をコピーしました。ゲーム起動時に検証・インストールされます。</string>
+    <string name="launcher_install_game">ゲームファイルをインストール（.zip / フォルダー）</string>
+    <string name="launcher_install_mod">MODをインストール（.zip / フォルダー）</string>
+    <string name="install_source_zip">ZIP アーカイブから</string>
+    <string name="install_source_folder">フォルダーから</string>
+    <string name="install_progress_title">インストール中…</string>
+    <string name="install_progress_status">%1$d ファイルをコピー済み、%2$s</string>
+    <string name="install_scanning">ソースを読み取り中…</string>
+    <string name="install_cancel">キャンセル</string>
+    <string name="install_done_game">ゲームファイルをインストールしました。必要に応じて、パッチ済み実行ファイルは初回起動時に自動的に作成されます。</string>
+    <string name="install_done_mod">インストールしたMOD: %1$d 件。MODマネージャーで有効化してください。</string>
+    <string name="install_cancelled">インストールをキャンセルしました。コピー途中のファイルはそのまま残っています。</string>
+    <string name="error_install_failed">インストールに失敗しました: %1$s</string>
+    <string name="error_install_no_game">選択したソースに game/default.xex が含まれていません。game、update、任意の dlc フォルダーを含むダンプを選択してください。</string>
+    <string name="error_install_no_mod">選択したソースに mod.ini が含まれていないため、MODが見つかりませんでした。</string>
+
+    <string-array name="driver_labels">
+        <item>自動（推奨）</item><item>システム</item><item>同梱 Turnip</item><item>Adreno 710 (Vauzi)</item><item>インポート済み</item>
+    </string-array>
+    <string-array name="render_mode_labels">
+        <item>自動（推奨）</item><item>GMEM</item><item>Sysmem</item>
+    </string-array>
+    <string-array name="touch_policy_labels">
+        <item>自動</item><item>常に表示</item><item>オフ</item>
+    </string-array>
+    <string-array name="touch_camera_labels">
+        <item>画面スワイプ</item><item>右スティック</item><item>オフ</item>
+    </string-array>
+</resources>

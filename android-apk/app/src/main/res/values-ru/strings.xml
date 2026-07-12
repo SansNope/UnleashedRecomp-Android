@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">UnleashedRecomp</string>
+    <string name="documents_game_title">Файлы игры Unleashed Recomp</string>
+    <string name="documents_game_summary">Активная игра, моды, конфигурация и сохранения</string>
+    <string name="documents_transfer_title">Передача файлов Unleashed Recomp</string>
+    <string name="documents_transfer_summary">Моды, импорт драйверов, логи и диагностические записи</string>
     <string name="mod_manager_launcher_name">Unleashed: моды</string>
     <string name="mod_manager_title">Моды Unleashed</string>
     <string name="mod_manager_hint">Скопируйте каждый мод отдельной папкой в каталог mods, обновите список, включите моды и задайте их приоритет. Сохранение создаёт стандартную базу CPKREDIR; для применения перезапустите игру.</string>

@@ -1244,7 +1244,10 @@ static void DrawConfigOptions()
             DrawConfigOption(rowCount++, yOffset, &Config::HorizontalCamera, true);
             DrawConfigOption(rowCount++, yOffset, &Config::VerticalCamera, true);
             DrawConfigOption(rowCount++, yOffset, &Config::Vibration, true);
+#ifndef __ANDROID__
+            // Window focus is a desktop concept; Android apps pause in background.
             DrawConfigOption(rowCount++, yOffset, &Config::AllowBackgroundInput, true);
+#endif
 #ifdef __ANDROID__
             DrawConfigOption(rowCount++, yOffset, &Config::TouchControls, true);
 #endif
@@ -1265,7 +1268,10 @@ static void DrawConfigOptions()
 #ifdef __ANDROID__
             DrawConfigOption(rowCount++, yOffset, &Config::VulkanDriver, true);
             DrawConfigOption(rowCount++, yOffset, &Config::RenderMode, true);
-#endif
+#else
+            // Windowing options make no sense on Android: the game always runs
+            // fullscreen on the one display at its native size, and the
+            // compositor vsyncs every frame regardless.
             DrawConfigOption(rowCount++, yOffset, &Config::WindowSize,
                 !Config::Fullscreen, &Localise("Options_Desc_NotAvailableFullscreen"),
                 0, 0, (int32_t)GameWindow::GetDisplayModes().size() - 1, false);
@@ -1278,11 +1284,14 @@ static void DrawConfigOptions()
                 monitorReason = &Localise("Options_Desc_NotAvailableHardware");
 
             DrawConfigOption(rowCount++, yOffset, &Config::Monitor, canChangeMonitor, monitorReason, 0, 0, displayCount - 1, false);
+#endif
 
             DrawConfigOption(rowCount++, yOffset, &Config::AspectRatio, true);
             DrawConfigOption(rowCount++, yOffset, &Config::ResolutionScale, true, nullptr, 0.25f, 1.0f, 2.0f);
+#ifndef __ANDROID__
             DrawConfigOption(rowCount++, yOffset, &Config::Fullscreen, true);
             DrawConfigOption(rowCount++, yOffset, &Config::VSync, true);
+#endif
             DrawConfigOption(rowCount++, yOffset, &Config::FPS, true, nullptr, FPS_MIN, 120, FPS_MAX);
             DrawConfigOption(rowCount++, yOffset, &Config::Brightness, true);
             DrawConfigOption(rowCount++, yOffset, &Config::AntiAliasing, Config::AntiAliasing.InaccessibleValues.size() != 3, &Localise("Options_Desc_NotAvailableHardware"));
