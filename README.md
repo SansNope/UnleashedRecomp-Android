@@ -26,8 +26,6 @@ This is an unofficial Android port of [Unleashed Recompiled](https://github.com/
 - App UI in English, Russian, Japanese, German, French, Spanish, Italian, and Portuguese
 - Logs and hang diagnostics that can be shared without `adb`
 
-The long-standing "ring crash" that made the game unplayable on some devices (crashes on ring pickup, random freezes, hangs at scripted moments — issue #27) was root-caused as a use-after-free in the game's own code, masked by Xbox 360 timing, and is fixed as of 0.5.0.
-
 The main development targets are Adreno 710, 725, 732, and 750. Adreno 720 and 722 are included in the bundled driver but need more testing. Other Adreno 6xx/7xx devices may work, but are not guaranteed.
 
 **Mali support is experimental.** Recent Mali GPUs (Valhall generation and newer with a Vulkan 1.3 driver — e.g. G610/G615/G710/G715/G720) run the game through the stock system driver: the app detects a non-Adreno GPU automatically and skips the bundled Adreno driver. Textures are decompressed on the CPU when the driver lacks BC format support, which increases memory usage. Confirmed working on a Dimensity 8300 Ultra (Mali-G615). Older Mali generations (Bifrost and earlier) cannot work.
