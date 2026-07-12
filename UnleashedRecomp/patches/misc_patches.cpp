@@ -377,6 +377,15 @@ PPC_FUNC(sub_82EA8AB0)
 // which reads guest address 0x5B..0x5C and crashes. Root cause unknown (likely an
 // unbound animation track); skip the evaluation instead of crashing and log the state
 // so reports tell us how often it fires.
+static std::string DumpGuestWords(uint8_t* base, uint32_t addr, size_t count)
+{
+    std::string words;
+    for (size_t i = 0; i < count; i++)
+        words += fmt::format("{:08X} ", PPC_LOAD_U32(addr + uint32_t(i * 4)));
+
+    return words;
+}
+
 PPC_FUNC_IMPL(__imp__sub_82F77188);
 PPC_FUNC(sub_82F77188)
 {
@@ -400,7 +409,8 @@ PPC_FUNC(sub_82F77188)
 #endif
 
             static std::atomic<uint32_t> s_reportCount{ 0 };
-            if (s_reportCount.fetch_add(1, std::memory_order_relaxed) < 8)
+            uint32_t report = s_reportCount.fetch_add(1, std::memory_order_relaxed);
+            if (report < 8)
             {
                 LOGFN_ERROR("sub_82F77188: skipping type-4 node with invalid data "
                     "(this={:08X} childA={:08X} dataA={:08X} childB={:08X} dataB={:08X})",
@@ -417,9 +427,93 @@ PPC_FUNC(sub_82F77188)
 #endif
             }
 
+            // Full node/child dumps for the first two reports: the leading words carry
+            // vtable pointers and slot indices that identify the class and asset.
+            if (report < 2)
+            {
+                LOGFN_ERROR("  this   @{:08X}: {}", ctx.r3.u32, DumpGuestWords(base, ctx.r3.u32, 12));
+                if (!invalidPtr(childA))
+                    LOGFN_ERROR("  childA @{:08X}: {}", childA, DumpGuestWords(base, childA, 12));
+                if (!invalidPtr(childB))
+                    LOGFN_ERROR("  childB @{:08X}: {}", childB, DumpGuestWords(base, childB, 12));
+                if (!invalidPtr(ctx.r4.u32))
+                    LOGFN_ERROR("  arg r4 @{:08X}: {}", ctx.r4.u32, DumpGuestWords(base, ctx.r4.u32, 12));
+
+                // Follow every pointer-shaped field one level: heap objects begin with a
+                // guest vtable (0x82xxxxxx), which statically identifies the class.
+                auto followPtr = [&](const char* label, uint32_t value)
+                {
+                    if (value >= 0x1000 && value < 0x20000000)
+                        LOGFN_ERROR("  {} -> @{:08X}: {}", label, value, DumpGuestWords(base, value, 8));
+                };
+
+                followPtr("this+8  ", PPC_LOAD_U32(ctx.r3.u32 + 8));
+                if (!invalidPtr(childA))
+                {
+                    // Owner/registry candidate: dump further to cover the slot tables
+                    // around +76 seen in sub_82F76698.
+                    uint32_t ownerA = PPC_LOAD_U32(childA + 0);
+                    if (ownerA >= 0x1000 && ownerA < 0x20000000)
+                        LOGFN_ERROR("  childA+0 -> @{:08X}: {}", ownerA, DumpGuestWords(base, ownerA, 24));
+                }
+                if (!invalidPtr(childB))
+                    followPtr("childB+0", PPC_LOAD_U32(childB + 0));
+                if (!invalidPtr(ctx.r4.u32))
+                {
+                    followPtr("r4+0    ", PPC_LOAD_U32(ctx.r4.u32 + 0));
+                    followPtr("r4+8    ", PPC_LOAD_U32(ctx.r4.u32 + 8));
+                    followPtr("r4+12   ", PPC_LOAD_U32(ctx.r4.u32 + 12));
+                }
+            }
+
             return;
+        }
+
+        // Reference dumps from healthy runs: vtables and layouts are identical on every
+        // device, so a non-crashing device supplies the class identification for the
+        // broken dumps coming from testers.
+        static std::atomic<uint32_t> s_healthyCount{ 0 };
+        if (s_healthyCount.fetch_add(1, std::memory_order_relaxed) < 2)
+        {
+            LOG_ERROR("sub_82F77188: healthy type-4 reference dump");
+            LOGFN_ERROR("  this   @{:08X}: {}", ctx.r3.u32, DumpGuestWords(base, ctx.r3.u32, 12));
+            LOGFN_ERROR("  childA @{:08X}: {}", childA, DumpGuestWords(base, childA, 12));
+            LOGFN_ERROR("  childB @{:08X}: {}", childB, DumpGuestWords(base, childB, 12));
+            LOGFN_ERROR("  arg r4 @{:08X}: {}", ctx.r4.u32, DumpGuestWords(base, ctx.r4.u32, 12));
+
+            auto followPtr = [&](const char* label, uint32_t value, size_t count)
+            {
+                if (value >= 0x1000 && value < 0x20000000)
+                    LOGFN_ERROR("  {} -> @{:08X}: {}", label, value, DumpGuestWords(base, value, count));
+            };
+
+            followPtr("this+8  ", PPC_LOAD_U32(ctx.r3.u32 + 8), 8);
+            followPtr("childA+0", PPC_LOAD_U32(childA + 0), 24);
+            followPtr("childB+0", PPC_LOAD_U32(childB + 0), 24);
+            followPtr("r4+0    ", PPC_LOAD_U32(ctx.r4.u32 + 0), 8);
+            followPtr("r4+8    ", PPC_LOAD_U32(ctx.r4.u32 + 8), 8);
+            followPtr("r4+12   ", PPC_LOAD_U32(ctx.r4.u32 + 12), 8);
         }
     }
 
     __imp__sub_82F77188(ctx, base);
+}
+
+// Node registration flusher: iterates a pending list on r3 and stores each node into
+// its registry's slot tables (the tables read as null in the issue #27 crash dumps).
+// Log the first registrations of a run to capture the registry object while healthy.
+PPC_FUNC_IMPL(__imp__sub_82F76698);
+PPC_FUNC(sub_82F76698)
+{
+    static std::atomic<uint32_t> s_dumpCount{ 0 };
+    if (s_dumpCount.fetch_add(1, std::memory_order_relaxed) < 2)
+    {
+        LOGFN_ERROR("sub_82F76698: registration dump (r3={:08X} r4={:08X})", ctx.r3.u32, ctx.r4.u32);
+        if (ctx.r3.u32 >= 0x1000 && ctx.r3.u32 < 0x20000000)
+            LOGFN_ERROR("  r3 @{:08X}: {}", ctx.r3.u32, DumpGuestWords(base, ctx.r3.u32, 24));
+        if (ctx.r4.u32 >= 0x1000 && ctx.r4.u32 < 0x20000000)
+            LOGFN_ERROR("  r4 @{:08X}: {}", ctx.r4.u32, DumpGuestWords(base, ctx.r4.u32, 12));
+    }
+
+    __imp__sub_82F76698(ctx, base);
 }
