@@ -64,6 +64,20 @@
     <string name="error_driver_copy">Could not import the driver: %1$s</string>
     <string name="error_open_files">Android Files could not open the application folder.</string>
     <string name="driver_imported">%1$s was copied. It will be validated and installed at game launch.</string>
+    <string name="launcher_install_game">Install game files (.zip / folder)</string>
+    <string name="launcher_install_mod">Install a mod (.zip / folder)</string>
+    <string name="install_source_zip">From a ZIP archive</string>
+    <string name="install_source_folder">From a folder</string>
+    <string name="install_progress_title">Installing…</string>
+    <string name="install_progress_status">%1$d files copied, %2$s</string>
+    <string name="install_scanning">Reading the source…</string>
+    <string name="install_cancel">Cancel</string>
+    <string name="install_done_game">Game files installed. The patched executable is prepared automatically on the first launch if needed.</string>
+    <string name="install_done_mod">Installed mods: %1$d. Enable them in the mod manager.</string>
+    <string name="install_cancelled">Installation cancelled. Partially copied files were left in place.</string>
+    <string name="error_install_failed">Installation failed: %1$s</string>
+    <string name="error_install_no_game">The selected source does not contain game/default.xex. Choose the dump that holds the game, update and optional dlc folders.</string>
+    <string name="error_install_no_mod">The selected source does not contain a mod.ini, so no mod could be found in it.</string>
 
     <string-array name="driver_labels">
         <item>Auto (recommended)</item><item>System</item><item>Bundled Turnip</item><item>Adreno 710 (Vauzi)</item><item>Imported</item>

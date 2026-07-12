@@ -40,6 +40,10 @@ import java.util.Map;
 /** Lightweight pre-flight screen. It deliberately does not load SDL or Vulkan. */
 public final class LauncherActivity extends Activity {
     private static final int REQUEST_DRIVER = 1001;
+    private static final int REQUEST_GAME_ZIP = 1002;
+    private static final int REQUEST_GAME_TREE = 1003;
+    private static final int REQUEST_MOD_ZIP = 1004;
+    private static final int REQUEST_MOD_TREE = 1005;
     private static final String[] DLC_DIRECTORIES = {
         "Apotos & Shamar Adventure Pack", "Chun-nan Adventure Pack",
         "Empire City & Adabat Adventure Pack", "Holoska Adventure Pack",
@@ -99,6 +103,7 @@ public final class LauncherActivity extends Activity {
         LinearLayout files = card(R.string.launcher_game_files);
         installStatus = statusText();
         files.addView(installStatus);
+        files.addView(button(R.string.launcher_install_game, view -> chooseInstallSource(true)));
         LinearLayout fileButtons = row();
         fileButtons.addView(button(R.string.launcher_open_files, view -> openFiles("game:")), weighted());
         fileButtons.addView(button(R.string.launcher_recheck, view -> refreshStatuses()), weighted());
@@ -129,8 +134,11 @@ public final class LauncherActivity extends Activity {
 
         LinearLayout mods = card(R.string.launcher_mods);
         mods.addView(text(getString(R.string.launcher_mods_summary), 14, false));
-        mods.addView(button(R.string.launcher_manage_mods,
-            view -> startActivity(new Intent(this, ModManagerActivity.class))));
+        LinearLayout modButtons = row();
+        modButtons.addView(button(R.string.launcher_manage_mods,
+            view -> startActivity(new Intent(this, ModManagerActivity.class))), weighted());
+        modButtons.addView(button(R.string.launcher_install_mod, view -> chooseInstallSource(false)), weighted());
+        mods.addView(modButtons);
         page.addView(mods);
 
         LinearLayout debug = card(R.string.launcher_debug);
@@ -205,10 +213,11 @@ public final class LauncherActivity extends Activity {
             return new InstallState(false, getString(R.string.error_storage_write, root));
         }
 
+        // patched/default.xex is intentionally not required here: since the raw-dump
+        // installer landed, the native side creates it from game+update on first boot.
         LinkedHashMap<String, File> required = new LinkedHashMap<>();
         required.put("game/default.xex", new File(root, "game/default.xex"));
         required.put("update/default.xexp", new File(root, "update/default.xexp"));
-        required.put("patched/default.xex", new File(root, "patched/default.xex"));
         List<String> missing = new ArrayList<>();
         for (Map.Entry<String, File> item : required.entrySet()) {
             if (!item.getValue().isFile() || item.getValue().length() == 0) {
@@ -218,7 +227,7 @@ public final class LauncherActivity extends Activity {
         if (!missing.isEmpty()) {
             File misplaced = findFile(root, "default.xex", 3);
             if (misplaced != null && !misplaced.equals(required.get("game/default.xex")) &&
-                !misplaced.equals(required.get("patched/default.xex"))) {
+                !misplaced.equals(new File(root, "patched/default.xex"))) {
                 return new InstallState(false, getString(R.string.error_game_nested,
                     relativePath(root, misplaced), root));
             }
@@ -320,7 +329,25 @@ public final class LauncherActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQUEST_DRIVER || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        switch (requestCode) {
+            case REQUEST_GAME_ZIP:
+                startInstall(data.getData(), true, true);
+                return;
+            case REQUEST_GAME_TREE:
+                startInstall(data.getData(), false, true);
+                return;
+            case REQUEST_MOD_ZIP:
+                startInstall(data.getData(), true, false);
+                return;
+            case REQUEST_MOD_TREE:
+                startInstall(data.getData(), false, false);
+                return;
+            case REQUEST_DRIVER:
+                break;
+            default:
+                return;
+        }
         Uri uri = data.getData();
         String name = queryDisplayName(uri);
         String lower = name.toLowerCase(Locale.ROOT);
@@ -349,6 +376,304 @@ public final class LauncherActivity extends Activity {
             target.delete();
             showError(getString(R.string.error_driver_copy, exception.getMessage()));
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Game files / mod installer: copy from a user-picked ZIP archive or
+    // folder into the game root, locating the content root automatically.
+    // ------------------------------------------------------------------
+
+    private void chooseInstallSource(boolean gameFiles) {
+        String[] items = { getString(R.string.install_source_zip), getString(R.string.install_source_folder) };
+        new AlertDialog.Builder(this)
+            .setTitle(gameFiles ? R.string.launcher_install_game : R.string.launcher_install_mod)
+            .setItems(items, (dialog, which) -> {
+                if (which == 0) {
+                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("*/*");
+                    intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {
+                        "application/zip", "application/x-zip-compressed", "application/octet-stream" });
+                    startActivityForResult(intent, gameFiles ? REQUEST_GAME_ZIP : REQUEST_MOD_ZIP);
+                } else {
+                    startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE),
+                        gameFiles ? REQUEST_GAME_TREE : REQUEST_MOD_TREE);
+                }
+            })
+            .show();
+    }
+
+    /** One copyable file inside the picked source, addressed by a relative path. */
+    private static final class SourceEntry {
+        final String path;     // normalized, '/'-separated, no leading slash
+        final Uri document;    // tree sources only; null for zip entries
+        SourceEntry(String path, Uri document) {
+            this.path = path;
+            this.document = document;
+        }
+    }
+
+    private static final class InstallProgress {
+        volatile boolean cancelled;
+        TextView label;
+        AlertDialog dialog;
+        int files;
+        long bytes;
+    }
+
+    private void startInstall(Uri source, boolean isZip, boolean gameFiles) {
+        InstallProgress progress = new InstallProgress();
+        progress.label = text(getString(R.string.install_scanning), 15, false);
+        progress.label.setPadding(dp(20), dp(16), dp(20), dp(16));
+        progress.dialog = new AlertDialog.Builder(this)
+            .setTitle(R.string.install_progress_title)
+            .setView(progress.label)
+            .setCancelable(false)
+            .setNegativeButton(R.string.install_cancel, (dialog, which) -> progress.cancelled = true)
+            .show();
+
+        String fallbackModName = safeName(stripZipExtension(queryDisplayName(source)));
+        new Thread(() -> {
+            try {
+                List<SourceEntry> entries = isZip ? listZipEntries(source) : listTreeEntries(source);
+                Map<SourceEntry, File> plan = gameFiles
+                    ? planGameInstall(entries)
+                    : planModInstall(entries, fallbackModName);
+                int modCount = gameFiles ? 0 : countPlannedMods(plan);
+
+                if (plan.isEmpty()) {
+                    finishInstall(progress, getString(gameFiles
+                        ? R.string.error_install_no_game : R.string.error_install_no_mod), false);
+                    return;
+                }
+
+                if (isZip) {
+                    copyZipEntries(source, plan, progress);
+                } else {
+                    copyTreeEntries(plan, progress);
+                }
+
+                if (progress.cancelled) {
+                    finishInstall(progress, getString(R.string.install_cancelled), false);
+                } else {
+                    finishInstall(progress, gameFiles
+                        ? getString(R.string.install_done_game)
+                        : getString(R.string.install_done_mod, modCount), true);
+                }
+            } catch (Exception exception) {
+                String reason = exception.getMessage() != null
+                    ? exception.getMessage() : exception.getClass().getSimpleName();
+                finishInstall(progress, getString(R.string.error_install_failed, reason), false);
+            }
+        }, "installer").start();
+    }
+
+    private void finishInstall(InstallProgress progress, String message, boolean success) {
+        runOnUiThread(() -> {
+            progress.dialog.dismiss();
+            new AlertDialog.Builder(this)
+                .setTitle(success ? R.string.install_progress_title : R.string.error_title)
+                .setMessage(message)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
+            refreshStatuses();
+        });
+    }
+
+    private void publishProgress(InstallProgress progress) {
+        String status = getString(R.string.install_progress_status, progress.files, formatBytes(progress.bytes));
+        runOnUiThread(() -> progress.label.setText(status));
+    }
+
+    /** Normalizes a zip/tree relative path; returns null when it must be skipped. */
+    private static String normalizeRelativePath(String raw) {
+        String path = raw.replace('\\', '/');
+        while (path.startsWith("/")) path = path.substring(1);
+        if (path.isEmpty() || path.endsWith("/")) return null;
+        for (String segment : path.split("/")) {
+            if (segment.isEmpty() || segment.equals(".") || segment.equals("..")) return null;
+        }
+        return path;
+    }
+
+    private List<SourceEntry> listZipEntries(Uri source) throws IOException {
+        List<SourceEntry> entries = new ArrayList<>();
+        try (java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(
+                openSourceStream(source))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                if (entry.isDirectory()) continue;
+                String path = normalizeRelativePath(entry.getName());
+                if (path != null) entries.add(new SourceEntry(path, null));
+            }
+        }
+        return entries;
+    }
+
+    private List<SourceEntry> listTreeEntries(Uri treeUri) {
+        List<SourceEntry> entries = new ArrayList<>();
+        listTreeChildren(treeUri, DocumentsContract.getTreeDocumentId(treeUri), "", entries, 0);
+        return entries;
+    }
+
+    private void listTreeChildren(Uri treeUri, String documentId, String prefix,
+            List<SourceEntry> out, int depth) {
+        if (depth > 8) return;
+        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId);
+        try (android.database.Cursor cursor = getContentResolver().query(children, new String[] {
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                DocumentsContract.Document.COLUMN_MIME_TYPE }, null, null, null)) {
+            if (cursor == null) return;
+            while (cursor.moveToNext()) {
+                String childId = cursor.getString(0);
+                String name = cursor.getString(1);
+                String mime = cursor.getString(2);
+                if (name == null || childId == null) continue;
+                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
+                    listTreeChildren(treeUri, childId, prefix + name + "/", out, depth + 1);
+                } else {
+                    String path = normalizeRelativePath(prefix + name);
+                    if (path != null) {
+                        out.add(new SourceEntry(path,
+                            DocumentsContract.buildDocumentUriUsingTree(treeUri, childId)));
+                    }
+                }
+            }
+        }
+    }
+
+    /** Everything under the folder that holds game/default.xex goes into the game root. */
+    private Map<SourceEntry, File> planGameInstall(List<SourceEntry> entries) {
+        String marker = "game/default.xex";
+        String prefix = null;
+        for (SourceEntry entry : entries) {
+            if (entry.path.equals(marker) || entry.path.endsWith("/" + marker)) {
+                String candidate = entry.path.substring(0, entry.path.length() - marker.length());
+                if (prefix == null || candidate.length() < prefix.length()) prefix = candidate;
+            }
+        }
+        Map<SourceEntry, File> plan = new LinkedHashMap<>();
+        if (prefix == null) return plan;
+        File root = AppStorage.activeGameRoot(this);
+        for (SourceEntry entry : entries) {
+            if (entry.path.startsWith(prefix)) {
+                plan.put(entry, new File(root, entry.path.substring(prefix.length())));
+            }
+        }
+        return plan;
+    }
+
+    /** Each folder holding a mod.ini becomes <game root>/mods/<folder name>. */
+    private Map<SourceEntry, File> planModInstall(List<SourceEntry> entries, String fallbackName) {
+        List<String> roots = new ArrayList<>();
+        for (SourceEntry entry : entries) {
+            if (entry.path.equals("mod.ini") || entry.path.endsWith("/mod.ini")) {
+                roots.add(entry.path.substring(0, entry.path.length() - "mod.ini".length()));
+            }
+        }
+        // Outermost roots only: a nested mod.ini belongs to its parent mod's content.
+        List<String> outer = new ArrayList<>();
+        for (String root : roots) {
+            boolean nested = false;
+            for (String other : roots) {
+                if (!other.equals(root) && root.startsWith(other)) { nested = true; break; }
+            }
+            if (!nested) outer.add(root);
+        }
+
+        Map<SourceEntry, File> plan = new LinkedHashMap<>();
+        File modsDir = new File(AppStorage.activeGameRoot(this), "mods");
+        for (SourceEntry entry : entries) {
+            for (String root : outer) {
+                if (!entry.path.startsWith(root)) continue;
+                String folderName = root.isEmpty()
+                    ? fallbackName
+                    : root.substring(root.lastIndexOf('/', root.length() - 2) + 1, root.length() - 1);
+                plan.put(entry, new File(new File(modsDir, safeName(folderName)),
+                    entry.path.substring(root.length())));
+                break;
+            }
+        }
+        return plan;
+    }
+
+    private static int countPlannedMods(Map<SourceEntry, File> plan) {
+        java.util.HashSet<String> modDirs = new java.util.HashSet<>();
+        for (File destination : plan.values()) {
+            File parent = destination;
+            while (parent.getParentFile() != null
+                    && !"mods".equals(parent.getParentFile().getName())) {
+                parent = parent.getParentFile();
+            }
+            modDirs.add(parent.getName());
+        }
+        return modDirs.size();
+    }
+
+    private InputStream openSourceStream(Uri uri) throws IOException {
+        InputStream input = getContentResolver().openInputStream(uri);
+        if (input == null) throw new IOException("Cannot open the selected source");
+        return input;
+    }
+
+    private void copyZipEntries(Uri source, Map<SourceEntry, File> plan, InstallProgress progress)
+            throws IOException {
+        Map<String, File> byPath = new LinkedHashMap<>();
+        for (Map.Entry<SourceEntry, File> item : plan.entrySet()) {
+            byPath.put(item.getKey().path, item.getValue());
+        }
+        try (java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(
+                openSourceStream(source))) {
+            java.util.zip.ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null && !progress.cancelled) {
+                if (entry.isDirectory()) continue;
+                String path = normalizeRelativePath(entry.getName());
+                File destination = path != null ? byPath.get(path) : null;
+                if (destination == null) continue;
+                copyStreamToFile(zip, destination, progress);
+            }
+        }
+    }
+
+    private void copyTreeEntries(Map<SourceEntry, File> plan, InstallProgress progress)
+            throws IOException {
+        for (Map.Entry<SourceEntry, File> item : plan.entrySet()) {
+            if (progress.cancelled) return;
+            try (InputStream input = openSourceStream(item.getKey().document)) {
+                copyStreamToFile(input, item.getValue(), progress);
+            }
+        }
+    }
+
+    private void copyStreamToFile(InputStream input, File destination, InstallProgress progress)
+            throws IOException {
+        File parent = destination.getParentFile();
+        if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+            throw new IOException("Cannot create " + parent);
+        }
+        try (FileOutputStream output = new FileOutputStream(destination)) {
+            byte[] buffer = new byte[256 * 1024];
+            int count;
+            long sinceUpdate = 0;
+            while ((count = input.read(buffer)) >= 0) {
+                if (progress.cancelled) return;
+                output.write(buffer, 0, count);
+                progress.bytes += count;
+                sinceUpdate += count;
+                if (sinceUpdate >= 16 * 1024 * 1024) {
+                    sinceUpdate = 0;
+                    publishProgress(progress);
+                }
+            }
+        }
+        progress.files++;
+        if (progress.files % 25 == 0) publishProgress(progress);
+    }
+
+    private static String stripZipExtension(String name) {
+        return name.toLowerCase(Locale.ROOT).endsWith(".zip")
+            ? name.substring(0, name.length() - 4) : name;
     }
 
     private void openFiles(String documentId) {
