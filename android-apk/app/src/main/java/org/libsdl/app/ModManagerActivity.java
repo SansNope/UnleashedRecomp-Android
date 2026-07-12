@@ -213,23 +213,18 @@ public final class ModManagerActivity extends Activity {
         Collections.addAll(sorted, children);
         sorted.sort(Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER));
 
+        // Parse the ini files of this level before descending: "mod" sorts before
+        // "mod.ini", so a mod whose content folders hold thousands of files used to
+        // exhaust the scan budget before its own mod.ini was ever read, hiding it
+        // and every mod after it (issue #58).
+        boolean foundModHere = false;
         for (File child : sorted) {
-            if (scannedFiles >= MAX_SCANNED_FILES) {
-                break;
-            }
-            if (Files.isSymbolicLink(child.toPath())) {
-                continue;
-            }
-            if (child.isDirectory()) {
-                scanForMods(child, depth + 1, result);
+            if (!child.isFile() || !child.getName().toLowerCase(Locale.ROOT).endsWith(".ini")
+                    || Files.isSymbolicLink(child.toPath())) {
                 continue;
             }
 
             scannedFiles++;
-            if (!child.getName().toLowerCase(Locale.ROOT).endsWith(".ini")) {
-                continue;
-            }
-
             Map<String, Map<String, String>> ini = readIni(child);
             if (!isSupportedModIni(ini)) {
                 continue;
@@ -242,8 +237,29 @@ public final class ModManagerActivity extends Activity {
                     continue;
                 }
                 result.put(canonicalPath, new ModEntry(child, canonicalPath, findTitle(child, ini)));
+                foundModHere = true;
             } catch (IOException ignored) {
                 // A path that cannot be canonicalised cannot be handed safely to ModLoader.
+            }
+        }
+
+        // A mod's folder only contains its own content; other mods never nest inside
+        // one, so skipping the descent keeps the scan budget for sibling mods.
+        if (foundModHere) {
+            return;
+        }
+
+        for (File child : sorted) {
+            if (scannedFiles >= MAX_SCANNED_FILES) {
+                break;
+            }
+            if (Files.isSymbolicLink(child.toPath())) {
+                continue;
+            }
+            if (child.isDirectory()) {
+                scanForMods(child, depth + 1, result);
+            } else if (!child.getName().toLowerCase(Locale.ROOT).endsWith(".ini")) {
+                scannedFiles++;
             }
         }
     }
