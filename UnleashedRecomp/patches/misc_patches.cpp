@@ -676,34 +676,53 @@ PPC_FUNC(sub_82ED4BB8)
         if (table >= 0x1000 && table < 0xFFFF0000 && count > 0 && count <= 1024 &&
             !IsQuarantined(table))
         {
-            uint32_t notified = 0;
-            for (uint32_t i = 0; i < count; i++)
-            {
-                uint32_t parent = PPC_LOAD_U32(table + i * 8);
-                if (parent < 0x1000 || parent >= 0xFFFF0000 || IsQuarantined(parent))
-                    continue;
+            // Remove every registered agent through the game's own removal
+            // path: sub_82EF58A0(agent) is self-contained (it derives its
+            // dispatch context from the agent) and is exactly what the
+            // remove-pair drain calls. This deregisters the agent from both
+            // children's tables AND the animation job list, so the pose
+            // validator sees a consistent graph - unlike the previous sink
+            // substitution, which left skipped nodes behind and drove the
+            // game's assert into a storm that overflowed a guest stack.
+            const uint32_t savedR3 = ctx.r3.u32;
+            const uint32_t savedR4 = ctx.r4.u32;
+            uint32_t removed = 0;
 
-                // Only touch slots that point exactly at the dying node.
-                bool touched = false;
-                if (PPC_LOAD_U32(parent + 16) == dying)
+            for (uint32_t guard = 0; guard < 1024; guard++)
+            {
+                uint32_t c = PPC_LOAD_U32(dying + 80);
+                if (c == 0 || c > 1024)
+                    break;
+
+                uint32_t tbl = PPC_LOAD_U32(dying + 76);
+                if (tbl < 0x1000 || tbl >= 0xFFFF0000)
+                    break;
+
+                uint32_t agent = PPC_LOAD_U32(tbl + (c - 1) * 8);
+                if (agent < 0x1000 || agent >= 0xFFFF0000 || IsQuarantined(agent))
                 {
-                    PPC_STORE_U32(parent + 16, GetSinkChild(base));
-                    touched = true;
+                    // Unremovable entry: drop it so the loop advances.
+                    PPC_STORE_U32(dying + 80, c - 1);
+                    continue;
                 }
-                if (PPC_LOAD_U32(parent + 20) == dying)
-                {
-                    PPC_STORE_U32(parent + 20, GetSinkChild(base));
-                    touched = true;
-                }
-                if (touched)
-                    notified++;
+
+                ctx.r3.u32 = agent;
+                sub_82EF58A0(ctx, base);
+                removed++;
+
+                // The removal must shrink the table; force progress if not.
+                if (PPC_LOAD_U32(dying + 80) >= c)
+                    PPC_STORE_U32(dying + 80, c - 1);
             }
 
-            if (notified > 0)
+            ctx.r3.u32 = savedR3;
+            ctx.r4.u32 = savedR4;
+
+            if (removed > 0)
             {
                 static std::atomic<uint32_t> s_notifyCount{ 0 };
                 if (s_notifyCount.fetch_add(1, std::memory_order_relaxed) < 16)
-                    LOGFN_ERROR("sub_82ED4BB8: notified {} live parents of dying node {:08X}", notified, dying);
+                    LOGFN_ERROR("sub_82ED4BB8: removed {} live agents of dying node {:08X}", removed, dying);
             }
         }
     }
