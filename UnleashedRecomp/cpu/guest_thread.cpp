@@ -3,22 +3,76 @@
 #include <kernel/memory.h>
 #include <kernel/heap.h>
 #include <kernel/function.h>
+#include <os/logger.h>
 #include "ppc_context.h"
 
 constexpr size_t PCR_SIZE = 0xAB0;
 constexpr size_t TLS_SIZE = 0x100;
 constexpr size_t TEB_SIZE = 0x2E0;
-constexpr size_t STACK_SIZE = 0x40000;
-constexpr size_t TOTAL_SIZE = PCR_SIZE + TLS_SIZE + TEB_SIZE + STACK_SIZE;
+constexpr size_t DEFAULT_STACK_SIZE = 0x40000;
 
 constexpr size_t TEB_OFFSET = PCR_SIZE + TLS_SIZE;
 
-GuestThreadContext::GuestThreadContext(uint32_t cpuNumber)
+// Written to the bottom (deepest addresses) of every guest stack; the watchdog and the
+// thread's own teardown check it to catch silent stack overruns into the neighbouring
+// heap allocations (issue #27 corruption pattern).
+constexpr uint32_t STACK_CANARY_WORD = 0x57ACC0DE;
+constexpr size_t STACK_CANARY_BYTES = 256;
+
+struct GuestStackRecord
+{
+    const uint8_t* canary;
+    uint32_t threadId;
+    bool reported;
+};
+
+static std::mutex g_guestStackMutex;
+static std::vector<GuestStackRecord> g_guestStacks;
+
+static void FillStackCanary(uint8_t* canary)
+{
+    for (size_t i = 0; i < STACK_CANARY_BYTES; i += sizeof(uint32_t))
+        *(uint32_t*)(canary + i) = STACK_CANARY_WORD;
+}
+
+static bool IsStackCanaryIntact(const uint8_t* canary)
+{
+    for (size_t i = 0; i < STACK_CANARY_BYTES; i += sizeof(uint32_t))
+    {
+        if (*(const uint32_t*)(canary + i) != STACK_CANARY_WORD)
+            return false;
+    }
+    return true;
+}
+
+void GuestThread::CheckStackCanaries()
+{
+    std::lock_guard lock(g_guestStackMutex);
+    for (auto& record : g_guestStacks)
+    {
+        if (!record.reported && !IsStackCanaryIntact(record.canary))
+        {
+            record.reported = true;
+            LOGF_ERROR("GUEST STACK OVERFLOW: thread {:X} overran its guest stack into the user heap.",
+                record.threadId);
+        }
+    }
+}
+
+GuestThreadContext::GuestThreadContext(uint32_t cpuNumber, uint32_t stackSize)
 {
     assert(thread == nullptr);
 
-    thread = (uint8_t*)g_userHeap.Alloc(TOTAL_SIZE);
-    memset(thread, 0, TOTAL_SIZE);
+    // Honor the stack size the game requested through ExCreateThread (rounded up to
+    // 64 KiB); previously every thread got a fixed 256 KiB regardless of the request.
+    size_t guestStackSize = stackSize != 0
+        ? (size_t(stackSize) + 0xFFFF) & ~size_t(0xFFFF)
+        : DEFAULT_STACK_SIZE;
+    guestStackSize = std::max(guestStackSize, size_t(DEFAULT_STACK_SIZE));
+
+    allocSize = PCR_SIZE + TLS_SIZE + TEB_SIZE + guestStackSize;
+    thread = (uint8_t*)g_userHeap.Alloc(allocSize);
+    memset(thread, 0, allocSize);
 
     *(uint32_t*)thread = ByteSwap(g_memory.MapVirtual(thread + PCR_SIZE)); // tls pointer
     *(uint32_t*)(thread + 0x100) = ByteSwap(g_memory.MapVirtual(thread + PCR_SIZE + TLS_SIZE)); // teb pointer
@@ -27,9 +81,16 @@ GuestThreadContext::GuestThreadContext(uint32_t cpuNumber)
     *(uint32_t*)(thread + PCR_SIZE + 0x10) = 0xFFFFFFFF; // that one TLS entry that felt quirky
     *(uint32_t*)(thread + PCR_SIZE + TLS_SIZE + 0x14C) = ByteSwap(GuestThread::GetCurrentThreadId()); // thread id
 
-    ppcContext.r1.u64 = g_memory.MapVirtual(thread + PCR_SIZE + TLS_SIZE + TEB_SIZE + STACK_SIZE); // stack pointer
+    ppcContext.r1.u64 = g_memory.MapVirtual(thread + allocSize); // stack pointer
     ppcContext.r13.u64 = g_memory.MapVirtual(thread);
     ppcContext.fpscr.loadFromHost();
+
+    uint8_t* canary = thread + PCR_SIZE + TLS_SIZE + TEB_SIZE;
+    FillStackCanary(canary);
+    {
+        std::lock_guard lock(g_guestStackMutex);
+        g_guestStacks.push_back({ canary, GuestThread::GetCurrentThreadId(), false });
+    }
 
     assert(GetPPCContext() == nullptr);
     SetPPCContext(ppcContext);
@@ -37,6 +98,18 @@ GuestThreadContext::GuestThreadContext(uint32_t cpuNumber)
 
 GuestThreadContext::~GuestThreadContext()
 {
+    const uint8_t* canary = thread + PCR_SIZE + TLS_SIZE + TEB_SIZE;
+    if (!IsStackCanaryIntact(canary))
+    {
+        LOGF_ERROR("GUEST STACK OVERFLOW: thread {:X} overran its {} KiB guest stack (detected at exit).",
+            GuestThread::GetCurrentThreadId(), (allocSize - PCR_SIZE - TLS_SIZE - TEB_SIZE) / 1024);
+    }
+
+    {
+        std::lock_guard lock(g_guestStackMutex);
+        std::erase_if(g_guestStacks, [&](const GuestStackRecord& r) { return r.canary == canary; });
+    }
+
     g_userHeap.Free(thread);
 }
 
@@ -144,7 +217,7 @@ uint32_t GuestThread::Start(const GuestThreadParams& params)
     const auto procMask = (uint8_t)(params.flags >> 24);
     const auto cpuNumber = procMask == 0 ? 0 : 7 - std::countl_zero(procMask);
 
-    GuestThreadContext ctx(cpuNumber);
+    GuestThreadContext ctx(cpuNumber, params.stackSize);
     ctx.ppcContext.r3.u64 = params.value;
 
     g_memory.FindFunction(params.function)(ctx.ppcContext, g_memory.base);

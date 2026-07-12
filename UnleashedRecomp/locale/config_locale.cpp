@@ -784,6 +784,78 @@ CONFIG_DEFINE_ENUM_LOCALE(EShadowResolution)
     }
 };
 
+CONFIG_DEFINE_LOCALE(PlanarReflections)
+{
+    { ELanguage::English,  { "Planar Reflections", "Render real-time reflections on reflective surfaces. Turning this off skips a whole scene render pass on stages that use them." } },
+    { ELanguage::Japanese, { "[平面:へいめん]リフレクション", "[反射面:はんしゃめん]のリアルタイム[反射:はんしゃ]を​レンダリングします" } },
+    { ELanguage::German,   { "Planare Reflexionen", "Rendere Echtzeit-Reflexionen auf spiegelnden Oberflächen. Das Deaktivieren spart einen ganzen Szenen-Renderdurchlauf auf Leveln, die sie verwenden." } },
+    { ELanguage::French,   { "Réflexions planaires", "Affiche des réflexions en temps réel sur les surfaces réfléchissantes. Désactiver cette option évite tout un rendu de scène sur les niveaux qui les utilisent." } },
+    { ELanguage::Spanish,  { "Reflejos planares", "Renderiza reflejos en tiempo real en las superficies reflectantes. Desactivarlo ahorra una pasada completa de renderizado en las fases que los usan." } },
+    { ELanguage::Italian,  { "Riflessi planari", "Renderizza riflessi in tempo reale sulle superfici riflettenti. Disattivandolo si salta un\'intera passata di rendering nei livelli che li usano." } }
+};
+
+CONFIG_DEFINE_LOCALE(TextureQuality)
+{
+    { ELanguage::English,  { "Texture Quality", "Reduce the resolution of game textures to save GPU memory and bandwidth. Applies to textures as they load; restart the stage to see the change." } },
+    { ELanguage::Japanese, { "テクスチャ[品質:ひんしつ]", "テクスチャの[解像度:かいぞうど]を​[下:さ]げて​GPUメモリと​[帯域:たいいき]を​[節約:せつやく]します" } },
+    { ELanguage::German,   { "Texturqualität", "Verringere die Auflösung der Spieltexturen, um GPU-Speicher und Bandbreite zu sparen. Gilt beim Laden; starte den Level neu, um die Änderung zu sehen." } },
+    { ELanguage::French,   { "Qualité des textures", "Réduit la résolution des textures du jeu pour économiser la mémoire et la bande passante du GPU. S'applique au chargement ; relancez le niveau pour voir le changement." } },
+    { ELanguage::Spanish,  { "Calidad de texturas", "Reduce la resolución de las texturas del juego para ahorrar memoria y ancho de banda de la GPU. Se aplica al cargar; reinicia la fase para ver el cambio." } },
+    { ELanguage::Italian,  { "Qualità delle texture", "Riduce la risoluzione delle texture del gioco per risparmiare memoria e banda della GPU. Si applica al caricamento; riavvia il livello per vedere la modifica." } }
+};
+
+CONFIG_DEFINE_ENUM_LOCALE(ETextureQuality)
+{
+    {
+        ELanguage::English,
+        {
+            { ETextureQuality::Full,    { "FULL", "Full: original texture resolution." } },
+            { ETextureQuality::Half,    { "HALF", "Half: skips the top mip level of every texture, like a half-resolution texture pack, but covering the base game, DLC and mods." } },
+            { ETextureQuality::Quarter, { "QUARTER", "Quarter: skips the top two mip levels of every texture. Lowest memory and bandwidth use." } }
+        }
+    },
+    {
+        ELanguage::Japanese,
+        {
+            { ETextureQuality::Full,    { "フル", "フル: オリジナルの解像度" } },
+            { ETextureQuality::Half,    { "ハーフ", "ハーフ: 各テクスチャの最上位ミップを省略します" } },
+            { ETextureQuality::Quarter, { "クォーター", "クォーター: 上位2つのミップを省略します" } }
+        }
+    },
+    {
+        ELanguage::German,
+        {
+            { ETextureQuality::Full,    { "VOLL", "Voll: originale Texturauflösung." } },
+            { ETextureQuality::Half,    { "HALB", "Halb: überspringt die oberste Mip-Stufe jeder Textur — wie ein Texturpaket in halber Auflösung, deckt aber Spiel, DLC und Mods ab." } },
+            { ETextureQuality::Quarter, { "VIERTEL", "Viertel: überspringt die obersten zwei Mip-Stufen. Geringster Speicher- und Bandbreitenverbrauch." } }
+        }
+    },
+    {
+        ELanguage::French,
+        {
+            { ETextureQuality::Full,    { "COMPLÈTE", "Complète : résolution d'origine des textures." } },
+            { ETextureQuality::Half,    { "MOITIÉ", "Moitié : ignore le niveau de mip supérieur de chaque texture, comme un pack de textures en demi-résolution couvrant le jeu, les DLC et les mods." } },
+            { ETextureQuality::Quarter, { "QUART", "Quart : ignore les deux niveaux de mip supérieurs. Consommation mémoire et bande passante minimales." } }
+        }
+    },
+    {
+        ELanguage::Spanish,
+        {
+            { ETextureQuality::Full,    { "COMPLETA", "Completa: resolución original de las texturas." } },
+            { ETextureQuality::Half,    { "MEDIA", "Media: omite el nivel de mip superior de cada textura, como un paquete de texturas a media resolución que cubre el juego, los DLC y los mods." } },
+            { ETextureQuality::Quarter, { "CUARTO", "Cuarto: omite los dos niveles de mip superiores. Mínimo uso de memoria y ancho de banda." } }
+        }
+    },
+    {
+        ELanguage::Italian,
+        {
+            { ETextureQuality::Full,    { "COMPLETA", "Completa: risoluzione originale delle texture." } },
+            { ETextureQuality::Half,    { "METÀ", "Metà: salta il livello mip superiore di ogni texture, come un pacchetto di texture a metà risoluzione che copre gioco, DLC e mod." } },
+            { ETextureQuality::Quarter, { "QUARTO", "Quarto: salta i due livelli mip superiori. Consumo minimo di memoria e banda." } }
+        }
+    }
+};
+
 // Japanese Notes: This localization should include furigana.
 CONFIG_DEFINE_LOCALE(GITextureFiltering)
 {

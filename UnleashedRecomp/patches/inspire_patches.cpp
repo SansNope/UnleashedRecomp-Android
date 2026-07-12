@@ -1,6 +1,7 @@
 #include "inspire_patches.h"
 #include <api/SWA.h>
 #include <ui/game_window.h>
+#include <ui/touch_controls.h>
 #include <os/logger.h>
 #include <app.h>
 #include <sdl_events.h>
@@ -46,6 +47,8 @@ PPC_FUNC(sub_82B98D80)
     g_pScene = (SWA::Inspire::CScene*)g_memory.Translate(ctx.r3.u32);
     g_isFirstFrameChecked = false;
     g_eventDispatchCount = 0;
+
+    TouchControls::NotifyCutsceneActive(true);
 }
 
 // ~SWA::Inspire::CScene
@@ -61,6 +64,8 @@ PPC_FUNC(sub_82B98D30)
 
     g_loadedMouthExplosionAnimation = false;
     g_hideMorphModels = false;
+
+    TouchControls::NotifyCutsceneActive(false);
 }
 
 PPC_FUNC_IMPL(__imp__sub_82B9BA98);

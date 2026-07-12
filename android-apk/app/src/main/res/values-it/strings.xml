@@ -1,0 +1,94 @@
+<resources>
+    <string name="app_name">UnleashedRecomp</string>
+    <string name="documents_game_title">File di gioco di Unleashed Recomp</string>
+    <string name="documents_game_summary">Gioco attivo, mod, configurazione e salvataggi</string>
+    <string name="documents_transfer_title">Trasferimenti di Unleashed Recomp</string>
+    <string name="documents_transfer_summary">Mod, importazioni di driver, log e acquisizioni diagnostiche</string>
+    <string name="mod_manager_launcher_name">Mod di Unleashed</string>
+    <string name="mod_manager_title">Mod di Unleashed</string>
+    <string name="mod_manager_hint">Copia ogni cartella di mod nella directory mods, aggiorna questo elenco, attiva le mod e ordina la loro priorità. Il salvataggio scrive il database CPKREDIR standard; riavvia il gioco per applicare le modifiche.</string>
+    <string name="mod_manager_open_files">Apri file</string>
+    <string name="mod_manager_refresh">Aggiorna</string>
+    <string name="mod_manager_save">Salva elenco mod</string>
+    <string name="mod_manager_empty">Nessun file mod.ini compatibile trovato. Apri la cartella delle mod, crea mods/ e copiaci dentro mod HMM o UMM.</string>
+    <string name="mod_manager_found">Trovate %1$d mod compatibili.</string>
+    <string name="mod_manager_saved">Salvate %1$d mod attivate in ordine di priorità.</string>
+    <string name="mod_manager_restart">Le modifiche alle mod verranno applicate dopo il riavvio del gioco.</string>
+    <string name="mod_manager_error_directory">Impossibile creare la directory di configurazione: %1$s</string>
+    <string name="mod_manager_error_save">Impossibile salvare il database delle mod: %1$s</string>
+    <string name="mod_manager_error_files">Impossibile aprire File di Android.</string>
+
+    <string name="launcher_title">Unleashed Recomp</string>
+    <string name="launcher_subtitle">Verifica l\'installazione e configura il gioco prima dell\'avvio.</string>
+    <string name="launcher_game_files">File di gioco</string>
+    <string name="launcher_open_files">Apri cartella del gioco</string>
+    <string name="launcher_recheck">Controlla di nuovo</string>
+    <string name="launcher_graphics">Driver grafico</string>
+    <string name="launcher_driver">Driver Vulkan</string>
+    <string name="launcher_render_mode">Modalità di rendering Turnip</string>
+    <string name="launcher_import_driver">Importa .so / .zip</string>
+    <string name="launcher_driver_folder">Cartella dei driver</string>
+    <string name="launcher_controls">Controlli</string>
+    <string name="launcher_touch_policy">Controlli su schermo</string>
+    <string name="launcher_touch_camera">Controllo della telecamera</string>
+    <string name="launcher_edit_layout">Disponi i controlli touch</string>
+    <string name="launcher_mods">Mod</string>
+    <string name="launcher_mods_summary">Attiva mod HMM/UMM compatibili e imposta la loro priorità.</string>
+    <string name="launcher_manage_mods">Gestisci mod</string>
+    <string name="launcher_debug">Opzioni di debug</string>
+    <string name="launcher_show_fps">Mostra FPS</string>
+    <string name="launcher_show_profiler">Mostra il profiler</string>
+    <string name="launcher_skip_intro">Salta i loghi introduttivi</string>
+    <string name="launcher_validation">Validazione sincronizzazione Vulkan (lenta)</string>
+    <string name="launcher_gfx_capture">Registra traccia GFXReconstruct (molto grande e lenta)</string>
+    <string name="launcher_open_logs">Apri log e acquisizioni</string>
+    <string name="launcher_play">Avvia il gioco</string>
+    <string name="launcher_driver_pending">%1$d pacchetto/i di driver verranno installati al prossimo avvio.</string>
+    <string name="launcher_driver_installed">Driver importato disponibile: %1$s</string>
+    <string name="launcher_driver_builtin">Sono disponibili i driver Turnip inclusi e il driver di sistema. Nessun driver importato trovato.</string>
+    <string name="launcher_driver_recovery">L\'ultimo avvio di Vulkan non è stato completato. Il ripristino automatico userà un driver più sicuro; scegli Sistema qui se il problema si ripete.</string>
+    <string name="launcher_log_found">Ultimo log trovato (%1$s).</string>
+    <string name="launcher_log_missing">Nessun log ancora. Un log viene creato all\'avvio del gioco.</string>
+    <string name="game_ready_all_dlc">Pronto all\'avvio. Rilevati gioco base, aggiornamento e tutti i DLC.</string>
+    <string name="game_ready_missing_dlc">Pronto all\'avvio. Rilevati gioco base e aggiornamento; pacchetti DLC: %1$d di %2$d.</string>
+    <string name="error_title">Impossibile continuare</string>
+    <string name="error_storage_create">L\'app non può creare la sua cartella di archiviazione:\n%1$s\n\nControlla lo spazio libero e la disponibilità dell\'archiviazione.</string>
+    <string name="error_storage_write">La cartella del gioco non è scrivibile:\n%1$s\n\nPotrebbe essere stata creata da adb o da un altro utente. Eliminala e lascia che l\'app la ricrei.</string>
+    <string name="error_game_missing">I file di gioco non sono installati. Copia le cartelle estratte dal dump Xbox 360 game, update e patched in:\n%1$s\n\nNon copiare un APK, file della versione PC o collegamenti.</string>
+    <string name="error_game_partial">L\'installazione è incompleta o danneggiata. File richiesti mancanti:%1$s\n\nRadice prevista:\n%2$s</string>
+    <string name="error_game_nested">I file di gioco sembrano annidati nella cartella sbagliata (%1$s). Sposta le cartelle game, update, patched ed eventualmente dlc direttamente in:\n%2$s</string>
+    <string name="error_settings_save">Impossibile salvare le impostazioni: %1$s</string>
+    <string name="error_layout_editor">Impossibile avviare l\'editor del layout: %1$s</string>
+    <string name="error_layout_requires_game">L\'editor del layout usa il renderer del gioco, quindi è richiesta un\'installazione valida del gioco.</string>
+    <string name="error_driver_extension">Scegli un semplice file Vulkan .so o un pacchetto .zip AdrenoTools/ExynosTools.</string>
+    <string name="error_driver_copy">Impossibile importare il driver: %1$s</string>
+    <string name="error_open_files">File di Android non ha potuto aprire la cartella dell\'applicazione.</string>
+    <string name="driver_imported">%1$s è stato copiato. Verrà convalidato e installato all\'avvio del gioco.</string>
+    <string name="launcher_install_game">Installa i file di gioco (.zip / cartella)</string>
+    <string name="launcher_install_mod">Installa una mod (.zip / cartella)</string>
+    <string name="install_source_zip">Da un archivio ZIP</string>
+    <string name="install_source_folder">Da una cartella</string>
+    <string name="install_progress_title">Installazione…</string>
+    <string name="install_progress_status">%1$d file copiati, %2$s</string>
+    <string name="install_scanning">Lettura dell\'origine…</string>
+    <string name="install_cancel">Annulla</string>
+    <string name="install_done_game">File di gioco installati. L\'eseguibile con patch viene preparato automaticamente al primo avvio se necessario.</string>
+    <string name="install_done_mod">Mod installate: %1$d. Attivale nel gestore delle mod.</string>
+    <string name="install_cancelled">Installazione annullata. I file copiati parzialmente sono stati lasciati al loro posto.</string>
+    <string name="error_install_failed">Installazione non riuscita: %1$s</string>
+    <string name="error_install_no_game">L\'origine selezionata non contiene game/default.xex. Scegli il dump che contiene le cartelle game, update ed eventualmente dlc.</string>
+    <string name="error_install_no_mod">L\'origine selezionata non contiene alcun mod.ini, quindi non è stata trovata nessuna mod.</string>
+
+    <string-array name="driver_labels">
+        <item>Auto (consigliato)</item><item>Sistema</item><item>Turnip incluso</item><item>Adreno 710 (Vauzi)</item><item>Importato</item>
+    </string-array>
+    <string-array name="render_mode_labels">
+        <item>Auto (consigliato)</item><item>GMEM</item><item>Sysmem</item>
+    </string-array>
+    <string-array name="touch_policy_labels">
+        <item>Auto</item><item>Sempre attivi</item><item>Disattivati</item>
+    </string-array>
+    <string-array name="touch_camera_labels">
+        <item>Scorrimento sullo schermo</item><item>Stick destro</item><item>Disattivato</item>
+    </string-array>
+</resources>

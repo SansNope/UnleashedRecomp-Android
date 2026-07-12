@@ -372,11 +372,19 @@ CONFIG_DEFINE_ENUM_TEMPLATE(EAntiAliasing)
 CONFIG_DEFINE_ENUM_TEMPLATE(EShadowResolution)
 {
     { "Original", EShadowResolution::Original },
+    { "256",      EShadowResolution::x256 },
     { "512",      EShadowResolution::x512 },
     { "1024",     EShadowResolution::x1024 },
     { "2048",     EShadowResolution::x2048 },
     { "4096",     EShadowResolution::x4096 },
     { "8192",     EShadowResolution::x8192 },
+};
+
+CONFIG_DEFINE_ENUM_TEMPLATE(ETextureQuality)
+{
+    { "Full",    ETextureQuality::Full },
+    { "Half",    ETextureQuality::Half },
+    { "Quarter", ETextureQuality::Quarter },
 };
 
 CONFIG_DEFINE_ENUM_TEMPLATE(EGITextureFiltering)

@@ -3,6 +3,12 @@
 #include <ui/game_window.h>
 
 #include <atomic>
+
+#ifdef __ANDROID__
+#include <os/android/page_watch.h>
+#include <dlfcn.h>
+#include <unistd.h>
+#endif
 #include <user/achievement_manager.h>
 #include <user/persistent_storage_manager.h>
 #include <user/config.h>
@@ -197,6 +203,297 @@ PPC_FUNC(sub_824EE620)
     ctx.r3.u32 = PersistentStorageManager::ShouldDisplayDLCMessage(true);
 }
 
+#ifdef __ANDROID__
+
+// issue #27 diag8: lifetime tracking for the game's small-block allocator.
+//
+// sub_82EA8A30 is the guest bucketed freelist allocator (Havok hkThreadMemory
+// layout: per-thread instance fetched from TLS, lock-free bucket pop) and
+// sub_82EA8AB0 is its free counterpart. The diag7 page watch showed a buffer
+// allocated through sub_82EA8A30 (by sub_82BB5870, count*48 bytes) being
+// copied right over a live animation node 16 bytes above it — i.e. the
+// allocator handed out overlapping blocks. This tracker records every
+// alloc/free in a ring buffer and keeps a live-block bitmap so the moment a
+// block is handed out twice we log both owners, and the evaluator guard can
+// print the full lifetime history of the broken node's memory.
+
+namespace
+{
+    constexpr uint32_t TRACK_LIMIT = 0x20000000; // 360 had 512 MB; game heap lives below this
+    constexpr size_t EVT_CAP = 1 << 16;
+
+    struct AllocEvent
+    {
+        uint32_t addr;
+        uint32_t size;
+        uint32_t ra;  // host return address as libmain offset (symbolizable to sub_XXXXXXXX)
+        uint16_t tid;
+        uint8_t op;   // 1 = alloc, 2 = free
+        uint8_t pad;
+    };
+
+    AllocEvent s_events[EVT_CAP];
+    std::atomic<uint64_t> s_evtIdx{ 0 };
+
+    // One bit per 8-byte granule (allocator rounds sizes to 8): 8 MB.
+    std::atomic<uint64_t> s_liveBits[TRACK_LIMIT / 8 / 64];
+
+    uintptr_t TrackModuleBase()
+    {
+        static uintptr_t s_base = []
+        {
+            Dl_info info{};
+            dladdr((void*)&TrackModuleBase, &info);
+            return (uintptr_t)info.dli_fbase;
+        }();
+        return s_base;
+    }
+
+    uint16_t TrackTid()
+    {
+        static thread_local uint16_t t_tid = (uint16_t)gettid();
+        return t_tid;
+    }
+
+    void RecordAllocEvent(uint32_t addr, uint32_t size, uint32_t ra, uint8_t op)
+    {
+        uint64_t i = s_evtIdx.fetch_add(1, std::memory_order_relaxed);
+        AllocEvent& e = s_events[i & (EVT_CAP - 1)];
+        e.addr = addr;
+        e.size = size;
+        e.ra = ra;
+        e.tid = TrackTid();
+        e.op = op;
+    }
+
+    // Returns true when setting bits that were already set: the allocator handed
+    // out memory overlapping a still-live tracked block.
+    bool MarkLiveRange(uint32_t addr, uint32_t size, bool set)
+    {
+        if (addr == 0 || size == 0 || size > 0x100000 || addr >= TRACK_LIMIT || size > TRACK_LIMIT - addr)
+            return false;
+
+        uint32_t g0 = addr >> 3;
+        uint32_t g1 = (addr + size - 1) >> 3;
+        bool overlap = false;
+
+        for (uint32_t w = g0 / 64; w <= g1 / 64; w++)
+        {
+            uint32_t bs = (w == g0 / 64) ? g0 % 64 : 0;
+            uint32_t be = (w == g1 / 64) ? g1 % 64 : 63;
+            uint64_t mask = (be == 63 ? ~0ull : ((1ull << (be + 1)) - 1)) & ~((1ull << bs) - 1);
+
+            if (set)
+            {
+                if (s_liveBits[w].fetch_or(mask, std::memory_order_relaxed) & mask)
+                    overlap = true;
+            }
+            else
+            {
+                s_liveBits[w].fetch_and(~mask, std::memory_order_relaxed);
+            }
+        }
+
+        return overlap;
+    }
+
+    void DumpAllocHistory(uint32_t target, uint32_t range, const char* tag)
+    {
+        uint64_t end = s_evtIdx.load(std::memory_order_acquire);
+        uint64_t begin = end > EVT_CAP ? end - EVT_CAP : 0;
+        int printed = 0;
+
+        for (uint64_t i = begin; i < end && printed < 24; i++)
+        {
+            const AllocEvent& e = s_events[i & (EVT_CAP - 1)];
+            uint32_t sz = e.size ? e.size : 1;
+            if (e.addr < target + range && target < e.addr + sz)
+            {
+                LOGF_ERROR("ALLOCTRACK[{}] #{} {} addr={:08X} size={} tid={} ra=libmain+0x{:X}",
+                    tag, i, e.op == 1 ? "alloc" : "free ", e.addr, e.size, e.tid, e.ra);
+                printed++;
+            }
+        }
+
+        if (printed == 0)
+            LOGF_ERROR("ALLOCTRACK[{}] no recorded events touch {:08X}", tag, target);
+    }
+
+    void TrackAlloc(uint32_t addr, uint32_t size, uint32_t ra)
+    {
+        RecordAllocEvent(addr, size, ra, 1);
+
+        if (MarkLiveRange(addr, size, true))
+        {
+            static std::atomic<uint32_t> s_dblCount{ 0 };
+            if (s_dblCount.fetch_add(1, std::memory_order_relaxed) < 16)
+            {
+                LOGF_ERROR("ALLOCTRACK double allocation: {:08X}+{} handed out while still live "
+                    "(tid={} ra=libmain+0x{:X})", addr, size, TrackTid(), ra);
+                DumpAllocHistory(addr, size, "double");
+            }
+        }
+    }
+
+    void TrackFree(uint32_t addr, uint32_t size, uint32_t ra)
+    {
+        RecordAllocEvent(addr, size, ra, 2);
+        MarkLiveRange(addr, size, false);
+    }
+
+    // diag9: free quarantine. The diag8 logs proved the crash chain on every
+    // affected device: a 512-byte node (factory sub_822EBF60) is destroyed by
+    // its own deallocating destructor (sub_82ED4BB8) while a live parent blend
+    // node still references it, and within a dozen allocator events the memory
+    // is reused by sub_82BB5870's transform buffers whose float data then gets
+    // read through the dangling pointer. Hold small freed blocks in a per-thread
+    // FIFO before really freeing them, and poison the payload with 0xFF so any
+    // dangling reader sees -1 - which the evaluator guard already treats as
+    // invalid and skips deterministically. If the ring crash disappears (or its
+    // frequency collapses) with this build, the use-after-free chain is proven
+    // end to end.
+    constexpr size_t QUAR_CAP = 1024;
+    constexpr uint32_t QUAR_MAX_SIZE = 512;
+
+    struct QuarantinedFree
+    {
+        uint32_t heap;
+        uint32_t addr;
+        uint32_t size;
+    };
+
+    thread_local QuarantinedFree t_quarantine[QUAR_CAP];
+    thread_local size_t t_quarantineHead = 0;
+    thread_local size_t t_quarantineCount = 0;
+}
+
+// Guest small-block allocate(heap r3, size r4) -> r3.
+PPC_FUNC_IMPL(__imp__sub_82EA8A30);
+PPC_FUNC(sub_82EA8A30)
+{
+    uint32_t size = ctx.r4.u32;
+    uintptr_t ra = (uintptr_t)__builtin_return_address(0);
+
+    __imp__sub_82EA8A30(ctx, base);
+
+    TrackAlloc(ctx.r3.u32, size, (uint32_t)(ra - TrackModuleBase()));
+}
+
+// Guest small-block free(heap r3, ptr r4, size r5).
+PPC_FUNC_IMPL(__imp__sub_82EA8AB0);
+PPC_FUNC(sub_82EA8AB0)
+{
+    uint32_t heap = ctx.r3.u32;
+    uint32_t addr = ctx.r4.u32;
+    uint32_t size = ctx.r5.u32;
+    uintptr_t ra = (uintptr_t)__builtin_return_address(0);
+
+    if (addr != 0)
+        TrackFree(addr, size, (uint32_t)(ra - TrackModuleBase()));
+
+    // The heap instance is per-thread (fetched from TLS by the guest code), so
+    // deferring a free and completing it later from the same thread is safe.
+    if (addr != 0 && size > 0 && size <= QUAR_MAX_SIZE)
+    {
+        memset(base + addr, 0xFF, size);
+
+        if (t_quarantineCount == QUAR_CAP)
+        {
+            const QuarantinedFree oldest = t_quarantine[t_quarantineHead];
+            t_quarantineHead = (t_quarantineHead + 1) % QUAR_CAP;
+            t_quarantineCount--;
+
+            ctx.r3.u32 = oldest.heap;
+            ctx.r4.u32 = oldest.addr;
+            ctx.r5.u32 = oldest.size;
+            __imp__sub_82EA8AB0(ctx, base);
+        }
+
+        t_quarantine[(t_quarantineHead + t_quarantineCount) % QUAR_CAP] = { heap, addr, size };
+        t_quarantineCount++;
+        return;
+    }
+
+    __imp__sub_82EA8AB0(ctx, base);
+}
+
+#endif
+
+#ifdef __ANDROID__
+
+// Parent-node clone (issue #27, diag9 crash site). sub_82F768E0 allocates a new
+// node via sub_82F76248, copies 128 bytes from the source node - including the
+// two child pointers at +16/+20 - and registers the clone in each child's slot
+// table (write through u32[child+76]). When a child has been destroyed early
+// (the use-after-free proven by diag8/diag9), this function both re-propagates
+// the dangling pointer into every new clone generation and, worse, writes the
+// clone's address through whatever u32[dead_child+76] now reads - randomly
+// corrupting the heap. This was the corruption amplifier all along.
+//
+// Repair the source before cloning: replace a dead child pointer (0/-1,
+// including the diag9 quarantine poison) with the surviving sibling, so the
+// slot-table registration writes to a valid table and the type-4 blend
+// degrades to blending one clip with itself (a one-frame visual artifact at
+// worst). If both children are dead, skip the clone entirely; the caller
+// iterates a batch and does not consume the return value.
+PPC_FUNC_IMPL(__imp__sub_82F768E0);
+PPC_FUNC(sub_82F768E0)
+{
+    // Only reject pointers that cannot be dereferenced safely (null page,
+    // 0/-1 destructed/poisoned markers, or so high that +76 leaves the 4GB
+    // guest arena). Slot tables may live in the static image (0x82xxxxxx),
+    // so no upper heap bound here.
+    auto usable = [](uint32_t ptr) { return ptr >= 0x1000 && ptr < 0xFFFF0000; };
+
+    uint32_t src = ctx.r4.u32;
+    if (usable(src))
+    {
+        uint32_t childA = PPC_LOAD_U32(src + 16);
+        uint32_t childB = PPC_LOAD_U32(src + 20);
+
+        // A child is dead when its pointer is unusable or its payload reads as
+        // destructed/poisoned (data pointer at +8, slot table pointer at +76).
+        auto dead = [&](uint32_t child)
+        {
+            if (!usable(child))
+                return true;
+            uint32_t data = PPC_LOAD_U32(child + 8);
+            if (data == 0 || data == 0xFFFFFFFF)
+                return true;
+            return !usable(PPC_LOAD_U32(child + 76));
+        };
+
+        bool deadA = dead(childA);
+        bool deadB = dead(childB);
+
+        if (deadA || deadB)
+        {
+            static std::atomic<uint32_t> s_repairCount{ 0 };
+            uint32_t report = s_repairCount.fetch_add(1, std::memory_order_relaxed);
+
+            if (deadA && deadB)
+            {
+                if (report < 8)
+                    LOGFN_ERROR("sub_82F768E0: both children dead, clone skipped (src={:08X} childA={:08X} childB={:08X})", src, childA, childB);
+                ctx.r3.u32 = 0;
+                return;
+            }
+
+            uint32_t survivor = deadA ? childB : childA;
+            PPC_STORE_U32(src + (deadA ? 16 : 20), survivor);
+            if (report < 8)
+            {
+                LOGFN_ERROR("sub_82F768E0: repaired dead child{} of {:08X} ({:08X} -> {:08X})",
+                    deadA ? 'A' : 'B', src, deadA ? childA : childB, survivor);
+            }
+        }
+    }
+
+    __imp__sub_82F768E0(ctx, base);
+}
+
+#endif
+
 // Animation node evaluator. The function dispatches on a type byte at +0; the type-4
 // branch interpolates between two child nodes (+16 / +20) and dereferences each child's
 // data pointer at +8 without validating it. On some devices (issue #27: Snapdragon
@@ -218,12 +515,30 @@ PPC_FUNC(sub_82F77188)
 
         if (invalidPtr(dataA) || invalidPtr(dataB))
         {
+#ifdef __ANDROID__
+            // Watchpoint the broken data field: whoever writes that page next gets
+            // its pc logged by the crash handler (PAGEWATCH HIT lines in log.txt).
+            uint32_t brokenChild = invalidPtr(dataB) ? childB : childA;
+            if (!invalidPtr(brokenChild))
+                os::android::ArmPageWatch(base + brokenChild + 8, base + brokenChild + 8);
+#endif
+
             static std::atomic<uint32_t> s_reportCount{ 0 };
             if (s_reportCount.fetch_add(1, std::memory_order_relaxed) < 8)
             {
                 LOGFN_ERROR("sub_82F77188: skipping type-4 node with invalid data "
                     "(this={:08X} childA={:08X} dataA={:08X} childB={:08X} dataB={:08X})",
                     ctx.r3.u32, childA, dataA, childB, dataB);
+
+#ifdef __ANDROID__
+                // diag8: print the allocation lifetime of the broken child node
+                // and its parent, so we can tell use-after-free (freed, then the
+                // memory re-handed to someone else) from double allocation.
+                uint32_t brokenNode = invalidPtr(dataB) ? childB : childA;
+                if (!invalidPtr(brokenNode))
+                    DumpAllocHistory(brokenNode, 48, "node");
+                DumpAllocHistory(ctx.r3.u32, 48, "parent");
+#endif
             }
 
             return;

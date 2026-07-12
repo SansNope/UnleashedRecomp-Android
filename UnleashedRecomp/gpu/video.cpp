@@ -308,6 +308,150 @@ static uint32_t g_statPipelineBinds;
 static uint32_t g_statBarrierCalls;
 static uint32_t g_statFramebufferSets;
 
+#if defined(__ANDROID__)
+// Periodic, machine-readable summaries for driver A/B tests. The on-screen profiler is
+// useful while playing, but screenshots cannot distinguish a GPU regression from fence,
+// acquire, present, or CPU pressure and do not preserve tail latency. Keep the hot path to
+// a few appends and emit/sort only once per five-second window.
+struct AndroidPerformanceSample
+{
+    double applicationMs;
+    double gpuMs;
+    double presentMs;
+    double frameFenceMs;
+    double presentWaitMs;
+    double acquireMs;
+    uint32_t drawCalls;
+    uint32_t renderPasses;
+    uint32_t pipelineBinds;
+    uint32_t barriers;
+    uint32_t framebufferSets;
+};
+
+static std::vector<AndroidPerformanceSample> g_androidPerformanceSamples;
+static std::chrono::steady_clock::time_point g_androidPerformanceWindowStart;
+static std::chrono::nanoseconds g_androidPerformanceCpuStart;
+static uint64_t g_androidPerformanceWindowIndex;
+
+static std::chrono::nanoseconds GetProcessCpuTime()
+{
+    timespec value{};
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &value);
+    return std::chrono::seconds(value.tv_sec) + std::chrono::nanoseconds(value.tv_nsec);
+}
+
+template<typename Getter>
+static double PerformancePercentile(const std::vector<AndroidPerformanceSample>& samples,
+    double percentile, Getter getter)
+{
+    std::vector<double> values;
+    values.reserve(samples.size());
+    for (const AndroidPerformanceSample& sample : samples)
+        values.push_back(getter(sample));
+
+    std::sort(values.begin(), values.end());
+    const size_t index = size_t(std::ceil(percentile * double(values.size() - 1)));
+    return values[index];
+}
+
+static void LogAndroidPerformanceSample(uint32_t swapWidth, uint32_t swapHeight)
+{
+    const auto now = std::chrono::steady_clock::now();
+    if (g_androidPerformanceSamples.empty())
+    {
+        g_androidPerformanceSamples.reserve(1024);
+        g_androidPerformanceWindowStart = now;
+        g_androidPerformanceCpuStart = GetProcessCpuTime();
+    }
+
+    g_androidPerformanceSamples.push_back({
+        App::s_deltaTime * 1000.0,
+        g_gpuFrameProfiler.value.load(),
+        g_presentProfiler.value.load(),
+        g_frameFenceProfiler.value.load(),
+        g_presentWaitProfiler.value.load(),
+        g_swapChainAcquireProfiler.value.load(),
+        g_statDrawCalls,
+        g_statRenderPassBegins,
+        g_statPipelineBinds,
+        g_statBarrierCalls,
+        g_statFramebufferSets,
+    });
+
+    const double windowMs = std::chrono::duration<double, std::milli>(now - g_androidPerformanceWindowStart).count();
+    if (windowMs < 5000.0)
+        return;
+
+    const auto app = [](const AndroidPerformanceSample& value) { return value.applicationMs; };
+    const auto gpu = [](const AndroidPerformanceSample& value) { return value.gpuMs; };
+    const auto present = [](const AndroidPerformanceSample& value) { return value.presentMs; };
+    double appTotal = 0.0;
+    double gpuTotal = 0.0;
+    double presentTotal = 0.0;
+    double fenceTotal = 0.0;
+    double presentWaitTotal = 0.0;
+    double acquireTotal = 0.0;
+    uint64_t drawTotal = 0;
+    uint64_t renderPassTotal = 0;
+    uint64_t pipelineBindTotal = 0;
+    uint64_t barrierTotal = 0;
+    uint64_t framebufferSetTotal = 0;
+    uint32_t over16 = 0;
+    uint32_t over33 = 0;
+    uint32_t over50 = 0;
+
+    for (const AndroidPerformanceSample& sample : g_androidPerformanceSamples)
+    {
+        appTotal += sample.applicationMs;
+        gpuTotal += sample.gpuMs;
+        presentTotal += sample.presentMs;
+        fenceTotal += sample.frameFenceMs;
+        presentWaitTotal += sample.presentWaitMs;
+        acquireTotal += sample.acquireMs;
+        drawTotal += sample.drawCalls;
+        renderPassTotal += sample.renderPasses;
+        pipelineBindTotal += sample.pipelineBinds;
+        barrierTotal += sample.barriers;
+        framebufferSetTotal += sample.framebufferSets;
+        over16 += sample.applicationMs > (1000.0 / 60.0);
+        over33 += sample.applicationMs > (1000.0 / 30.0);
+        over50 += sample.applicationMs > 50.0;
+    }
+
+    const double count = double(g_androidPerformanceSamples.size());
+    const double cpuMs = std::chrono::duration<double, std::milli>(GetProcessCpuTime() - g_androidPerformanceCpuStart).count();
+    LOGF("PERF window={} duration_ms={:.1f} frames={} fps={:.2f} cpu_core_pct={:.1f} "
+         "app_ms(avg/p50/p95/p99/max)={:.3f}/{:.3f}/{:.3f}/{:.3f}/{:.3f} "
+         "gpu_ms(avg/p50/p95/p99/max)={:.3f}/{:.3f}/{:.3f}/{:.3f}/{:.3f} "
+         "present_ms(avg/p95/max)={:.3f}/{:.3f}/{:.3f} "
+         "wait_ms(fence/present/acquire)={:.3f}/{:.3f}/{:.3f} "
+         "stutter_frames(>16.67/>33.33/>50)={}/{}/{} "
+         "work_per_frame(draws/passes/pipelines/barriers/framebuffers)={:.1f}/{:.1f}/{:.1f}/{:.1f}/{:.1f} "
+         "swapchain={}x{} config(fps/vsync)={}/{}",
+        g_androidPerformanceWindowIndex++, windowMs, g_androidPerformanceSamples.size(),
+        count * 1000.0 / windowMs, cpuMs * 100.0 / windowMs,
+        appTotal / count, PerformancePercentile(g_androidPerformanceSamples, 0.50, app),
+        PerformancePercentile(g_androidPerformanceSamples, 0.95, app),
+        PerformancePercentile(g_androidPerformanceSamples, 0.99, app),
+        PerformancePercentile(g_androidPerformanceSamples, 1.00, app),
+        gpuTotal / count, PerformancePercentile(g_androidPerformanceSamples, 0.50, gpu),
+        PerformancePercentile(g_androidPerformanceSamples, 0.95, gpu),
+        PerformancePercentile(g_androidPerformanceSamples, 0.99, gpu),
+        PerformancePercentile(g_androidPerformanceSamples, 1.00, gpu),
+        presentTotal / count, PerformancePercentile(g_androidPerformanceSamples, 0.95, present),
+        PerformancePercentile(g_androidPerformanceSamples, 1.00, present),
+        fenceTotal / count, presentWaitTotal / count, acquireTotal / count,
+        over16, over33, over50,
+        double(drawTotal) / count, double(renderPassTotal) / count, double(pipelineBindTotal) / count,
+        double(barrierTotal) / count, double(framebufferSetTotal) / count,
+        swapWidth, swapHeight, Config::FPS.Value, Config::VSync.Value);
+
+    g_androidPerformanceSamples.clear();
+    g_androidPerformanceWindowStart = now;
+    g_androidPerformanceCpuStart = GetProcessCpuTime();
+}
+#endif
+
 // On Android there is no F1 key: the initial state comes from Config::ShowProfiler
 // (launcher checkbox), and closing the overlay writes the config back so it stays
 // closed on the next launch (issue #46). See DrawProfiler.
@@ -3092,6 +3236,12 @@ void Video::Present()
     }
 
     g_presentProfiler.Reset();
+
+#if defined(__ANDROID__)
+    LogAndroidPerformanceSample(
+        g_swapChain ? g_swapChain->getWidth() : 0,
+        g_swapChain ? g_swapChain->getHeight() : 0);
+#endif
 }
 
 void Video::StartPipelinePrecompilation()
@@ -6098,13 +6248,30 @@ static bool LoadTexture(GuestTexture& texture, const uint8_t* data, size_t dataS
     {
         forceCubeMap &= (ddsDesc.type == ddspp::Texture2D) && (ddsDesc.arraySize == 1);
         uint32_t arraySize = ddsDesc.type == ddspp::TextureType::Cubemap ? (ddsDesc.arraySize * 6) : ddsDesc.arraySize;
-            
+
+        // Texture Quality: serve the texture from further down its own mip chain
+        // (the DDS already contains the smaller levels, so this only skips data).
+        // Mipless textures (UI, fonts) and anything that would drop below 32px
+        // stay untouched, so HUD art and small detail maps keep their pixels.
+        uint32_t mipSkip = 0;
+        if (Config::TextureQuality != ETextureQuality::Full && ddsDesc.numMips > 1)
+        {
+            mipSkip = Config::TextureQuality == ETextureQuality::Quarter ? 2u : 1u;
+            while (mipSkip > 0 &&
+                (mipSkip >= ddsDesc.numMips ||
+                 std::max(ddsDesc.width >> mipSkip, ddsDesc.height >> mipSkip) < 32))
+            {
+                mipSkip--;
+            }
+        }
+        const uint32_t textureMips = ddsDesc.numMips - mipSkip;
+
         RenderTextureDesc desc;
         desc.dimension = ConvertTextureDimension(ddsDesc.type);
-        desc.width = ddsDesc.width;
-        desc.height = ddsDesc.height;
-        desc.depth = ddsDesc.depth;
-        desc.mipLevels = ddsDesc.numMips;
+        desc.width = std::max(1u, ddsDesc.width >> mipSkip);
+        desc.height = std::max(1u, ddsDesc.height >> mipSkip);
+        desc.depth = std::max(1u, ddsDesc.type == ddspp::Texture3D ? ddsDesc.depth >> mipSkip : ddsDesc.depth);
+        desc.mipLevels = textureMips;
         desc.arraySize = arraySize;
         desc.format = ConvertDXGIFormat(ddsDesc.format);
         desc.flags = ddsDesc.type == ddspp::TextureType::Cubemap ? RenderTextureFlag::CUBE : RenderTextureFlag::NONE;
@@ -6134,7 +6301,7 @@ static bool LoadTexture(GuestTexture& texture, const uint8_t* data, size_t dataS
         RenderTextureViewDesc viewDesc;
         viewDesc.format = desc.format;
         viewDesc.dimension = ConvertTextureViewDimension(ddsDesc.type);
-        viewDesc.mipLevels = ddsDesc.numMips;
+        viewDesc.mipLevels = textureMips;
         viewDesc.componentMapping = componentMapping;
 
         if (forceCubeMap)
@@ -6144,8 +6311,8 @@ static bool LoadTexture(GuestTexture& texture, const uint8_t* data, size_t dataS
         texture.descriptorIndex = g_textureDescriptorAllocator.allocate();
         g_textureDescriptorSet->setTexture(texture.descriptorIndex, texture.texture, RenderTextureLayout::SHADER_READ, texture.textureView.get());
 
-        texture.width = ddsDesc.width;
-        texture.height = ddsDesc.height;
+        texture.width = desc.width;
+        texture.height = desc.height;
         texture.viewDimension = viewDesc.dimension;
 
         struct Slice
@@ -6169,7 +6336,7 @@ static bool LoadTexture(GuestTexture& texture, const uint8_t* data, size_t dataS
         {
             for (uint32_t mipSlice = 0; mipSlice < ddsDesc.numMips; mipSlice++)
             {
-                auto& slice = slices.emplace_back();
+                Slice slice;
 
                 slice.width = std::max(1u, ddsDesc.width >> mipSlice);
                 slice.height = std::max(1u, ddsDesc.height >> mipSlice);
@@ -6198,8 +6365,14 @@ static bool LoadTexture(GuestTexture& texture, const uint8_t* data, size_t dataS
                     slice.dstRowCount = slice.rowCount;
                 }
 
+                // Source data always advances over every mip in the file; skipped
+                // top mips are simply never uploaded.
                 curSrcOffset += slice.srcRowPitch * slice.rowCount * slice.depth;
+                if (mipSlice < mipSkip)
+                    continue;
+
                 curDstOffset += (slice.dstRowPitch * slice.dstRowCount * slice.depth + PLACEMENT_ALIGNMENT - 1) & ~(PLACEMENT_ALIGNMENT - 1);
+                slices.push_back(slice);
             }
         }
 
@@ -6290,7 +6463,7 @@ static bool LoadTexture(GuestTexture& texture, const uint8_t* data, size_t dataS
                             footprintRowWidth = (slice.dstRowPitch * 8) / ddsDesc.bitsPerPixelOrBlock * ddsDesc.blockWidth;
 
                         g_copyCommandList->copyTextureRegion(
-                            RenderTextureCopyLocation::Subresource(texture.texture, subresourceIndex % ddsDesc.numMips, subresourceIndex / ddsDesc.numMips),
+                            RenderTextureCopyLocation::Subresource(texture.texture, subresourceIndex % textureMips, subresourceIndex / textureMips),
                             RenderTextureCopyLocation::PlacedFootprint(uploadBuffer.get(), desc.format, slice.width, slice.height, slice.depth, footprintRowWidth, slice.dstOffset));
                     };
 

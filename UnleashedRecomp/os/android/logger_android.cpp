@@ -1,5 +1,7 @@
 #include <os/logger.h>
 
+#include <cpu/guest_thread.h>
+#include <os/android/page_watch.h>
 #include <os/android/storage_android.h>
 
 #include <android/log.h>
@@ -231,6 +233,9 @@ static void* WatchdogThread(void*)
         if (s_watchdogSuspended.load(std::memory_order_relaxed))
             continue;
 
+        // Catch guest stacks that silently overran into the user heap (issue #27).
+        GuestThread::CheckStackCanaries();
+
         const double now = MonotonicSeconds() - s_startSeconds;
         const double last = s_lastHeartbeat.load(std::memory_order_relaxed);
         const uint64_t frames = s_frameCount.load(std::memory_order_relaxed);
@@ -355,6 +360,20 @@ static void CrashWriteAddress(int fd, const char* label, uint64_t address)
 
 static void CrashSignalHandler(int signal, siginfo_t* info, void* contextPtr)
 {
+#if defined(__aarch64__)
+    // Software watchpoint (issue #27): a write fault on the armed page is logged
+    // with the writer's pc and execution continues; it is not a crash.
+    if (signal == SIGSEGV && info != nullptr && contextPtr != nullptr)
+    {
+        const ucontext_t* watchContext = static_cast<const ucontext_t*>(contextPtr);
+        if (os::android::PageWatchHandleFault(info->si_addr,
+                watchContext->uc_mcontext.pc, watchContext->uc_mcontext.regs[30], GetTid()))
+        {
+            return;
+        }
+    }
+#endif
+
     const int fd = s_logRawFd.load(std::memory_order_acquire);
     if (fd >= 0)
     {
@@ -486,8 +505,8 @@ void os::logger::Init()
     // Create log.txt promptly (and roll the previous one) so a tester always finds a
     // fresh file, even if this run happens to log nothing else before a freeze.
     WriteLogRecord("[logger]", nullptr, "Unleashed Recomp log started", 28);
-    static constexpr char BuildVersion[] = "=== APK VERSION: 0.4.0 (2026-07-12) ===";
-    static constexpr char BuildId[] = "ANDROID_BUILD_ID=0.4.0-release";
+    static constexpr char BuildVersion[] = "=== APK VERSION: 1.5.1-roadmap-v37 (2026-07-12) ===";
+    static constexpr char BuildId[] = "ANDROID_BUILD_ID=1.5.1-roadmap-v37-diag10-clonefix";
     WriteLogRecord("[build]", nullptr, BuildVersion, sizeof(BuildVersion) - 1);
     WriteLogRecord("[build]", nullptr, BuildId, sizeof(BuildId) - 1);
     LogDeviceInfo();

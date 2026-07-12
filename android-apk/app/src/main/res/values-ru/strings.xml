@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="app_name">UnleashedRecomp</string>
+    <string name="documents_game_title">Файлы игры Unleashed Recomp</string>
+    <string name="documents_game_summary">Активная игра, моды, конфигурация и сохранения</string>
+    <string name="documents_transfer_title">Передача файлов Unleashed Recomp</string>
+    <string name="documents_transfer_summary">Моды, импорт драйверов, логи и диагностические записи</string>
     <string name="mod_manager_launcher_name">Unleashed: моды</string>
     <string name="mod_manager_title">Моды Unleashed</string>
     <string name="mod_manager_hint">Скопируйте каждый мод отдельной папкой в каталог mods, обновите список, включите моды и задайте их приоритет. Сохранение создаёт стандартную базу CPKREDIR; для применения перезапустите игру.</string>
@@ -60,6 +65,20 @@
     <string name="error_driver_copy">Не удалось импортировать драйвер: %1$s</string>
     <string name="error_open_files">Не удалось открыть папку приложения в системных «Файлах».</string>
     <string name="driver_imported">%1$s скопирован. Драйвер будет проверен и установлен при запуске игры.</string>
+    <string name="launcher_install_game">Установить файлы игры (.zip / папка)</string>
+    <string name="launcher_install_mod">Установить мод (.zip / папка)</string>
+    <string name="install_source_zip">Из ZIP-архива</string>
+    <string name="install_source_folder">Из папки</string>
+    <string name="install_progress_title">Установка…</string>
+    <string name="install_progress_status">Скопировано файлов: %1$d, %2$s</string>
+    <string name="install_scanning">Чтение источника…</string>
+    <string name="install_cancel">Отмена</string>
+    <string name="install_done_game">Файлы игры установлены. Пропатченный исполняемый файл при необходимости будет создан автоматически при первом запуске.</string>
+    <string name="install_done_mod">Установлено модов: %1$d. Включите их в менеджере модов.</string>
+    <string name="install_cancelled">Установка отменена. Частично скопированные файлы остались на месте.</string>
+    <string name="error_install_failed">Установка не удалась: %1$s</string>
+    <string name="error_install_no_game">В выбранном источнике нет game/default.xex. Выберите дамп, содержащий папки game, update и (опционально) dlc.</string>
+    <string name="error_install_no_mod">В выбранном источнике нет mod.ini — мод не найден.</string>
 
     <string-array name="driver_labels">
         <item>Авто (рекомендуется)</item><item>Системный</item><item>Встроенный Turnip</item><item>Adreno 710 (Vauzi)</item><item>Импортированный</item>

@@ -1421,7 +1421,7 @@ uint32_t ExCreateThread(be<uint32_t>* handle, uint32_t stackSize, be<uint32_t>* 
 
     uint32_t hostThreadId;
 
-    *handle = GetKernelHandle(GuestThread::Start({ startAddress, startContext, creationFlags }, &hostThreadId));
+    *handle = GetKernelHandle(GuestThread::Start({ startAddress, startContext, creationFlags, stackSize }, &hostThreadId));
 
     if (threadId != nullptr)
         *threadId = hostThreadId;

@@ -326,6 +326,31 @@ int main(int argc, char *argv[])
 
     HostStartup();
 
+#ifdef __ANDROID__
+    // The desktop installer wizard produces patched/default.xex; the Android
+    // launcher's installer only copies files the user points it at. When a raw
+    // dump (game/ + update/, no patched/) was copied, produce the patched
+    // executable here so the install becomes bootable without a PC.
+    {
+        std::filesystem::path root = GetGamePath();
+        std::filesystem::path baseXex = root / "game" / "default.xex";
+        std::filesystem::path updateXexp = root / "update" / "default.xexp";
+        std::filesystem::path patchedXex = root / "patched" / "default.xex";
+        std::error_code patchEc;
+        if (!std::filesystem::exists(patchedXex, patchEc) &&
+            std::filesystem::exists(baseXex, patchEc) &&
+            std::filesystem::exists(updateXexp, patchEc))
+        {
+            std::filesystem::create_directories(root / "patched", patchEc);
+            XexPatcher::Result patchResult = XexPatcher::apply(baseXex, updateXexp, patchedXex);
+            if (patchResult == XexPatcher::Result::Success)
+                LOG("Created patched/default.xex from the raw game dump.");
+            else
+                LOGFN_ERROR("Failed to create patched/default.xex from the raw dump (XexPatcher result {}).", int(patchResult));
+        }
+    }
+#endif
+
     std::filesystem::path modulePath;
     bool isGameInstalled = Installer::checkGameInstall(GetGamePath(), modulePath);
     bool runInstallerWizard = forceInstaller || forceDLCInstaller || !isGameInstalled;

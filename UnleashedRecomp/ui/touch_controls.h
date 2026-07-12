@@ -26,6 +26,14 @@ public:
     // Latest synthesised pad state (player 1). Valid only while IsVisible().
     static const XAMINPUT_GAMEPAD& GetGamepadState();
 
+    // Game-context signals for the adaptive layout. NotifyMenuVisible must be
+    // called every frame a navigation menu is on screen (the flag decays on its
+    // own); the cutscene flag is edge-triggered from scene ctor/dtor hooks. In a
+    // menu the left stick becomes a D-pad; in a cutscene everything collapses to
+    // a single SKIP button.
+    static void NotifyMenuVisible();
+    static void NotifyCutsceneActive(bool active);
+
     static void Init();
     static void Draw();
 };
