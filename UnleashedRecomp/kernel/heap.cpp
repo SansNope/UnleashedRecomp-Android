@@ -3,6 +3,8 @@
 #include "memory.h"
 #include "function.h"
 
+#include <deque>
+
 constexpr size_t RESERVED_BEGIN = 0x7FEA0000;
 constexpr size_t RESERVED_END = 0xA0000000;
 
@@ -45,7 +47,35 @@ void Heap::Free(void* ptr)
     else
     {
         std::lock_guard lock(mutex);
+#ifdef __ANDROID__
+        // issue #27: the game's teardown races leave stale guest pointers into
+        // RtlAllocateHeap memory too, not only into the small-block allocator.
+        // A stale write into a freed-and-reused user-heap block corrupts o1heap
+        // fragment headers, crashing a later o1heapAllocate on a garbage next
+        // pointer. Defer the real free (contents intact, no poison - o1heap
+        // only writes its metadata once the fragment is actually freed) so the
+        // Xbox 360's memory-stays-intact-until-reuse behaviour holds here as
+        // well. Bounded by entries and bytes; oldest frees complete first.
+        static constexpr size_t DEFER_CAP = 4096;
+        static constexpr size_t DEFER_MAX_BYTES = 16 * 1024 * 1024;
+        struct DeferredFree { void* ptr; size_t size; };
+        static std::deque<DeferredFree> s_deferred; // guarded by `mutex`
+        static size_t s_deferredBytes = 0;
+
+        size_t size = Size(ptr);
+        while (!s_deferred.empty() &&
+               (s_deferred.size() >= DEFER_CAP || s_deferredBytes + size > DEFER_MAX_BYTES))
+        {
+            o1heapFree(heap, s_deferred.front().ptr);
+            s_deferredBytes -= s_deferred.front().size;
+            s_deferred.pop_front();
+        }
+
+        s_deferred.push_back({ ptr, size });
+        s_deferredBytes += size;
+#else
         o1heapFree(heap, ptr);
+#endif
     }
 }
 
