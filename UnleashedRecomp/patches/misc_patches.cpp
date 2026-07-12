@@ -335,8 +335,12 @@ static uint32_t GetSinkChild(uint8_t* base)
     return guest;
 }
 
-// Returns true when the node needed repair. `canSkip` callers (the clone) may
-// abandon the operation when both children are dead instead of using the sink.
+// Returns true when the node needed repair. Dead children are always replaced
+// with the sink, never with the surviving sibling: the sink keeps registration
+// writes safe while its destroyed-reading data pointer keeps the evaluator
+// guard skipping the node. Substituting the sibling was tried and re-armed the
+// evaluation with a mismatched clip, which tripped the game's own pose
+// consistency assert (KeBugCheck from sub_82BB5870).
 static bool RepairNodeChildren(uint8_t* base, uint32_t node, const char* who, bool& bothDead)
 {
     bothDead = false;
@@ -351,26 +355,18 @@ static bool RepairNodeChildren(uint8_t* base, uint32_t node, const char* who, bo
     if (!deadA && !deadB)
         return false;
 
-    static std::atomic<uint32_t> s_repairCount{ 0 };
-    uint32_t report = s_repairCount.fetch_add(1, std::memory_order_relaxed);
-
-    if (deadA && deadB)
-    {
-        bothDead = true;
-        uint32_t sink = GetSinkChild(base);
+    bothDead = deadA && deadB;
+    uint32_t sink = GetSinkChild(base);
+    if (deadA)
         PPC_STORE_U32(node + 16, sink);
+    if (deadB)
         PPC_STORE_U32(node + 20, sink);
-        if (report < 8)
-            LOGF_ERROR("{}: both children of {:08X} dead ({:08X}/{:08X}), sink substituted", who, node, childA, childB);
-        return true;
-    }
 
-    uint32_t survivor = deadA ? childB : childA;
-    PPC_STORE_U32(node + (deadA ? 16 : 20), survivor);
-    if (report < 8)
+    static std::atomic<uint32_t> s_repairCount{ 0 };
+    if (s_repairCount.fetch_add(1, std::memory_order_relaxed) < 8)
     {
-        LOGF_ERROR("{}: repaired dead child{} of {:08X} ({:08X} -> {:08X})",
-            who, deadA ? 'A' : 'B', node, deadA ? childA : childB, survivor);
+        LOGF_ERROR("{}: sink substituted for dead child{}{} of {:08X} (childA={:08X} childB={:08X})",
+            who, deadA ? "A" : "", deadB ? "B" : "", node, childA, childB);
     }
     return true;
 }
