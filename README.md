@@ -16,13 +16,17 @@ This is an unofficial Android port of [Unleashed Recompiled](https://github.com/
 
 - The full game, including title screens and regular gameplay
 - ARM64 Android devices
-- On-screen touch controls with multi-touch
+- Installing the game and mods from a `.zip` or folder directly in the app — no PC needed
+- On-screen touch controls with multi-touch, touch camera control, and a drag-to-arrange layout editor; the layout adapts to the game (D-pad in menus, a SKIP button in cutscenes)
 - Bluetooth and USB controllers
 - Sound through speakers, wired headphones, and Bluetooth devices
 - HMM and UMM-style mods through the included **Unleashed Mods** app
 - Built-in Turnip driver plus importing another driver as a plain `.so` or an AdrenoTools/ExynosTools package `.zip`
 - Game-file access through Android's system Files app
+- App UI in English, Russian, Japanese, German, French, Spanish, Italian, and Portuguese
 - Logs and hang diagnostics that can be shared without `adb`
+
+The long-standing "ring crash" that made the game unplayable on some devices (crashes on ring pickup, random freezes, hangs at scripted moments — issue #27) was root-caused as a use-after-free in the game's own code, masked by Xbox 360 timing, and is fixed as of 0.5.0.
 
 The main development targets are Adreno 710, 725, 732, and 750. Adreno 720 and 722 are included in the bundled driver but need more testing. Other Adreno 6xx/7xx devices may work, but are not guaranteed.
 
@@ -46,24 +50,35 @@ For the smoothest first run, start with the default graphics settings. The Andro
 
 1. Download the latest APK from the repository's [Releases](https://github.com/SansNope/UnleashedRecomp-Android/releases) page.
 2. Allow your browser or file manager to install apps from unknown sources when Android asks.
-3. Install and launch **UnleashedRecomp** once. The first launch creates the app's folders and prepares the bundled graphics driver.
-4. If the game reports that its files are missing, open Android's Files app and choose **Unleashed Recomp game files**.
-5. Copy the `game`, `update`, `patched`, and optional `dlc` folders from your legal dump into the folder shown by the app.
-6. Close and reopen the game.
+3. Install and open **UnleashedRecomp**. The first launch creates the app's folders and prepares the bundled graphics driver.
+4. Tap **Install game files (.zip / folder)** in the launcher and pick your game dump — either a ZIP archive or an extracted folder. The app finds the game inside the archive automatically, however the folders are nested, and copies everything into place with a progress display.
+5. Tap **Launch game**.
 
-No PC and your file manager cannot see `Android/data`? Put the same folders into `Android/media/com.sega.sonicunr/UnleashedRecomp/` instead — that folder is browsable by regular file managers and the app picks it up automatically. Driver packages can likewise go into `Android/media/com.sega.sonicunr/driver_import/`.
+A raw dump (`game` + `update`, with optional `dlc`) is enough: if the `patched` folder produced by the desktop installer is missing, the app builds the patched executable itself on first launch. No PC is required at any point.
 
-Do not use `adb push` directly into `Android/data`. Files created there by the shell can receive ownership that prevents the app from reading them. Use the system Files interface exposed by the app instead.
+<details>
+<summary>Manual installation (alternative)</summary>
+
+- Open Android's Files app, choose **Unleashed Recomp game files**, and copy the `game`, `update`, and optional `dlc` folders from your dump into the folder shown by the app.
+- If your file manager cannot see `Android/data`, put the same folders into `Android/media/com.sega.sonicunr/UnleashedRecomp/` instead — that folder is browsable by regular file managers and the app picks it up automatically. Driver packages can likewise go into `Android/media/com.sega.sonicunr/driver_import/`.
+- Do not use `adb push` directly into `Android/data`. Files created there by the shell can receive ownership that prevents the app from reading them.
+
+</details>
 
 ## Controls
 
 The touch controller appears automatically when you touch the screen. It provides:
 
-- Left analog stick
+- Left analog stick — which turns into an 8-way D-pad while a menu, the title screen, or the world map is open
 - A, B, X, and Y
 - LB and RB
 - LT and RT
 - Start and Back
+- Camera control: drag anywhere on the free right half of the screen (default), or switch to a dedicated virtual right stick in the launcher's Controls card
+
+During in-engine cutscenes the controls collapse into a single **SKIP** button; the full layout returns when gameplay resumes.
+
+Every control can be repositioned and resized: tap **Arrange touch controls** in the launcher to open the drag-to-arrange editor.
 
 When a physical controller sends input, the touch overlay hides itself. Touch the screen again to bring it back.
 
@@ -71,19 +86,13 @@ USB and Bluetooth controllers supported by SDL should work without additional se
 
 ## Installing mods
 
-The APK installs a second launcher entry named **Unleashed Mods**.
+1. Tap **Install a mod (.zip / folder)** in the launcher's Mods card and pick the mod archive or folder. Every mod inside is detected by its `mod.ini` — archives containing several mods install in one go.
+2. Tap **Manage mods**, enable the mods you want, and arrange their priority.
+3. Tap **Save mod list** and restart the game.
 
-1. Open **Unleashed Mods**.
-2. Tap **Open Files** and create or open the `mods` folder.
-3. Copy each mod into its own folder. A compatible mod contains a `mod.ini` file.
-4. Return to the mod manager and tap **Refresh**.
-5. Enable the mods you want and arrange their priority.
-6. Tap **Save mod list**.
-7. Restart the game.
+Mods can also be copied into the `mods` folder manually through Android Files (each mod in its own folder with a `mod.ini`); tap **Refresh** in the manager afterwards.
 
-The manager writes standard `cpkredir.ini` and `ModsDB.ini` files. Relative paths from desktop mod packs are also supported, so most HMM/UMM layouts can be copied without manually rewriting every path.
-
-If a mod does not appear, check that `mod.ini` is not buried inside an extra nested folder. Desktop-only code mods or mods that depend on Windows DLLs will not work on Android.
+The manager writes standard `cpkredir.ini` and `ModsDB.ini` files. Relative paths from desktop mod packs are also supported, so most HMM/UMM layouts can be copied without manually rewriting every path. Desktop-only code mods or mods that depend on Windows DLLs will not work on Android.
 
 ## Graphics drivers
 
@@ -108,11 +117,23 @@ Only import drivers from a source you trust. A bad or incompatible Vulkan driver
 
 Technical findings and current limitations for ExynosTools and PanVK are documented in [`docs/GRAPHICS_DRIVERS.md`](docs/GRAPHICS_DRIVERS.md).
 
+## Performance on weaker devices
+
+The Android build already defaults to a 50% resolution scale, no anti-aliasing, and motion blur off. If that is not enough, the in-game Video options offer, roughly in order of impact:
+
+- **Resolution Scale** — the single biggest lever; it can go down to 25%.
+- **Texture Quality** (Full / Half / Quarter) — loads every texture at half or quarter resolution, cutting texture memory and GPU bandwidth like a low-resolution texture pack, but covering the base game, DLC, and mods with no extra files. UI and fonts stay sharp.
+- **FPS cap** — capping at 30 greatly reduces heat and gives steadier frame pacing on devices that cannot hold 60.
+- **Shadow Resolution** — down to 256 for the weakest GPUs.
+- **Planar Reflections** — turning them off stops reflective stages (towns, water) from rendering the scene twice.
+
+These options make separately downloaded "low end" texture packs unnecessary for most devices, and they stack with data-side mods that strip particles or global illumination.
+
 ## Troubleshooting
 
 ### The game cannot find my files
 
-Make sure the selected directory contains `game`, `update`, and, if available, `dlc`. Use the Files location exposed by **UnleashedRecomp**, not an arbitrary folder with the same name.
+Use **Install game files (.zip / folder)** in the launcher — it locates the game inside your dump automatically and reports what is missing. If you copied files manually, make sure the selected directory contains `game`, `update`, and, if available, `dlc`, in the Files location exposed by **UnleashedRecomp**, not an arbitrary folder with the same name.
 
 ### The game opens to a black screen or corrupted graphics
 
