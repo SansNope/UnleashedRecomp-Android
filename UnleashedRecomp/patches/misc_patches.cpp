@@ -618,6 +618,91 @@ PPC_FUNC(sub_82F760A8)
 // destructor onto whichever thread later drains the queue is a novel
 // concurrency risk the game never had.
 
+// ---------------------------------------------------------------------------
+// The two halves of the actual lifetime defect (diag21).
+//
+// Agent nodes are born in exactly one place: sub_82F764C8(?, childA, childB,
+// ...) stores both children at +16/+20 of the fresh node and registers the
+// node into each child's registration table (u32[child+76], count at +80,
+// 8-byte entries of {agent, partner} - the same layout sub_82F760A8 walks).
+// The child's deallocating destructor (sub_82ED4BB8) does NOT walk that
+// table: nothing tells live parents their child is gone. On the Xbox 360 the
+// stale pointer kept reading intact memory until reuse; on this port it reads
+// poison. Two hooks close both halves:
+//  1. births: refuse to create an agent whose child is already destroyed;
+//  2. deaths: deliver the notification the game never sends - walk the dying
+//     node's registration table and point every live parent's matching child
+//     slot at the sink node (evaluator-invisible, registration-safe).
+// ---------------------------------------------------------------------------
+
+static uint32_t GetSinkChild(uint8_t* base);
+
+// Agent-node constructor: the only birthplace of parent nodes.
+PPC_FUNC_IMPL(__imp__sub_82F764C8);
+PPC_FUNC(sub_82F764C8)
+{
+    if (IsQuarantined(ctx.r4.u32) || IsQuarantined(ctx.r5.u32))
+    {
+        static std::atomic<uint32_t> s_dropCount{ 0 };
+        if (s_dropCount.fetch_add(1, std::memory_order_relaxed) < 16)
+            LOGFN_ERROR("sub_82F764C8: refused agent birth with destroyed child (a={:08X} b={:08X})", ctx.r4.u32, ctx.r5.u32);
+        ctx.r3.u32 = 0;
+        return;
+    }
+
+    __imp__sub_82F764C8(ctx, base);
+}
+
+// Family destructor: deliver the missing parent notification before the
+// object dies. Layout guards keep this a no-op for family members that do
+// not carry a registration table.
+PPC_FUNC_IMPL(__imp__sub_82ED4BB8);
+PPC_FUNC(sub_82ED4BB8)
+{
+    const uint32_t dying = ctx.r3.u32;
+    if (dying >= 0x1000 && dying < 0xFFFF0000)
+    {
+        uint32_t table = PPC_LOAD_U32(dying + 76);
+        uint32_t count = PPC_LOAD_U32(dying + 80);
+
+        if (table >= 0x1000 && table < 0xFFFF0000 && count > 0 && count <= 1024 &&
+            !IsQuarantined(table))
+        {
+            uint32_t notified = 0;
+            for (uint32_t i = 0; i < count; i++)
+            {
+                uint32_t parent = PPC_LOAD_U32(table + i * 8);
+                if (parent < 0x1000 || parent >= 0xFFFF0000 || IsQuarantined(parent))
+                    continue;
+
+                // Only touch slots that point exactly at the dying node.
+                bool touched = false;
+                if (PPC_LOAD_U32(parent + 16) == dying)
+                {
+                    PPC_STORE_U32(parent + 16, GetSinkChild(base));
+                    touched = true;
+                }
+                if (PPC_LOAD_U32(parent + 20) == dying)
+                {
+                    PPC_STORE_U32(parent + 20, GetSinkChild(base));
+                    touched = true;
+                }
+                if (touched)
+                    notified++;
+            }
+
+            if (notified > 0)
+            {
+                static std::atomic<uint32_t> s_notifyCount{ 0 };
+                if (s_notifyCount.fetch_add(1, std::memory_order_relaxed) < 16)
+                    LOGFN_ERROR("sub_82ED4BB8: notified {} live parents of dying node {:08X}", notified, dying);
+            }
+        }
+    }
+
+    __imp__sub_82ED4BB8(ctx, base);
+}
+
 // Node child repair (issue #27). Three routines dereference a node's children
 // (+16/+20) and write to each child's slot table through u32[child+76]: the
 // evaluator, the single-node clone (sub_82F768E0) and the pool swap-remove
