@@ -141,6 +141,7 @@ enum class EAntiAliasing : uint32_t
 enum class EShadowResolution : int32_t
 {
     Original = -1,
+    x256 = 256,
     x512 = 512,
     x1024 = 1024,
     x2048 = 2048,
@@ -152,6 +153,17 @@ enum class EGITextureFiltering : uint32_t
 {
     Bilinear,
     Bicubic
+};
+
+// Drops the top mip levels of game textures at load time: Half skips one level,
+// Quarter skips two. Cuts GPU memory and sampling bandwidth like a low-res
+// texture pack, but covers every texture (base game, DLC, mods) with no extra
+// files. Textures without mip chains (UI, fonts) are unaffected.
+enum class ETextureQuality : uint32_t
+{
+    Full,
+    Half,
+    Quarter
 };
 
 enum class EDepthOfFieldQuality : uint32_t
