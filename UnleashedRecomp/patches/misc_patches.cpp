@@ -534,71 +534,12 @@ PPC_FUNC(sub_82F760A8)
 
 #ifdef __ANDROID__
 
-// Deferred deallocating destructor (issue #27, the actual lifetime fix).
-// sub_82ED4BB8 is the shared deallocating destructor of the physics/animation
-// node family: the game destroys these objects from the main thread while
-// worker threads still evaluate them through queued collision pairs. Every
-// downstream symptom - ring crashes, pose asserts, and after the guards
-// started skipping dead nodes, intangible walls and job-counter freezes -
-// traces back to references outliving this destructor by a few milliseconds.
-//
-// Defer the whole destructor call by DEFER_DTOR_MS: the object stays fully
-// alive and registered while the stale references drain, then the original
-// destructor runs unchanged (its free lands in the allocator quarantine
-// below, adding a second layer of grace). Only deallocating calls (r4 & 1)
-// are deferred; non-deallocating destructor calls target stack or embedded
-// objects whose memory is reclaimed by the caller immediately.
-PPC_FUNC_IMPL(__imp__sub_82ED4BB8);
-PPC_FUNC(sub_82ED4BB8)
-{
-    constexpr uint64_t DEFER_DTOR_MS = 1000;
-
-    struct DeferredDtor
-    {
-        uint32_t object;
-        uint32_t flags;
-        uint64_t tick;
-    };
-
-    static std::mutex s_mutex;
-    static std::deque<DeferredDtor> s_queue;
-
-    const uint32_t thisObject = ctx.r3.u32;
-
-    if ((ctx.r4.u32 & 1) == 0)
-    {
-        __imp__sub_82ED4BB8(ctx, base);
-        return;
-    }
-
-    const uint64_t now = SDL_GetTicks64();
-    {
-        std::lock_guard lock(s_mutex);
-        s_queue.push_back({ thisObject, ctx.r4.u32, now });
-    }
-
-    // Run destructors whose grace period has passed. The loop releases the
-    // lock around each call: the destructor may recurse into this hook.
-    for (;;)
-    {
-        DeferredDtor entry;
-        {
-            std::lock_guard lock(s_mutex);
-            if (s_queue.empty() || now - s_queue.front().tick < DEFER_DTOR_MS)
-                break;
-            entry = s_queue.front();
-            s_queue.pop_front();
-        }
-
-        ctx.r3.u32 = entry.object;
-        ctx.r4.u32 = entry.flags;
-        __imp__sub_82ED4BB8(ctx, base);
-    }
-
-    // The destructor returns `this` in r3; the caller of the deferred call
-    // must observe the same contract.
-    ctx.r3.u32 = thisObject;
-}
+// The destructor-deferral experiments (diag17/diag18: 100ms and 1s) are
+// deliberately NOT part of this build. They disproved their own premise -
+// the dangling references are not a finite timing window but undead agents
+// born from the drain (see the pair hooks above) - and deferring the
+// destructor onto whichever thread later drains the queue is a novel
+// concurrency risk the game never had.
 
 // Node child repair (issue #27). Three routines dereference a node's children
 // (+16/+20) and write to each child's slot table through u32[child+76]: the
