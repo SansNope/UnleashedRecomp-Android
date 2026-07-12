@@ -461,7 +461,7 @@ PPC_FUNC(sub_82EA8AB0)
 PPC_FUNC_IMPL(__imp__sub_82ED4BB8);
 PPC_FUNC(sub_82ED4BB8)
 {
-    constexpr uint64_t DEFER_DTOR_MS = 100;
+    constexpr uint64_t DEFER_DTOR_MS = 1000;
 
     struct DeferredDtor
     {
