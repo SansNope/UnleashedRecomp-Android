@@ -1,8 +1,10 @@
 #include <api/SWA.h>
 #include <os/logger.h>
 #include <ui/game_window.h>
+#include <kernel/heap.h>
 
 #include <atomic>
+#include <mutex>
 
 #ifdef __ANDROID__
 #include <os/android/page_watch.h>
@@ -421,75 +423,150 @@ PPC_FUNC(sub_82EA8AB0)
 
 #ifdef __ANDROID__
 
-// Parent-node clone (issue #27, diag9 crash site). sub_82F768E0 allocates a new
-// node via sub_82F76248, copies 128 bytes from the source node - including the
-// two child pointers at +16/+20 - and registers the clone in each child's slot
-// table (write through u32[child+76]). When a child has been destroyed early
-// (the use-after-free proven by diag8/diag9), this function both re-propagates
-// the dangling pointer into every new clone generation and, worse, writes the
-// clone's address through whatever u32[dead_child+76] now reads - randomly
-// corrupting the heap. This was the corruption amplifier all along.
-//
-// Repair the source before cloning: replace a dead child pointer (0/-1,
-// including the diag9 quarantine poison) with the surviving sibling, so the
-// slot-table registration writes to a valid table and the type-4 blend
-// degrades to blending one clip with itself (a one-frame visual artifact at
-// worst). If both children are dead, skip the clone entirely; the caller
-// iterates a batch and does not consume the return value.
+// Node child repair (issue #27). Three routines dereference a node's children
+// (+16/+20) and write to each child's slot table through u32[child+76]: the
+// evaluator, the single-node clone (sub_82F768E0) and the pool swap-remove
+// flusher (sub_82F76698). When a child was destroyed early (the proven
+// use-after-free), that dereference reads the quarantine poison 0xFFFFFFFF and
+// faults past the 4GB guest arena - or, before the quarantine existed, wrote
+// through reused garbage and corrupted the heap at random. Repair the node
+// before those routines run: a dead child is replaced with its surviving
+// sibling (the type-4 blend degrades to blending a clip with itself), and if
+// both children are dead they are pointed at a synthetic "sink" node whose
+// data pointer reads as destroyed (so the evaluator skips it) and whose slot
+// table is a private scratch buffer (so registrations land harmlessly).
+
+// Only reject pointers that cannot be dereferenced safely (null page, 0/-1
+// destructed/poisoned markers, or so high that +76 leaves the 4GB guest
+// arena). Slot tables may live in the static image, so no upper heap bound.
+static bool NodePtrUsable(uint32_t ptr)
+{
+    return ptr >= 0x1000 && ptr < 0xFFFF0000;
+}
+
+// A child is dead when its pointer is unusable or its payload reads as
+// destructed/poisoned (data pointer at +8, slot table pointer at +76).
+static bool NodeChildDead(uint8_t* base, uint32_t child)
+{
+    if (!NodePtrUsable(child))
+        return true;
+    uint32_t data = PPC_LOAD_U32(child + 8);
+    if (data == 0 || data == 0xFFFFFFFF)
+        return true;
+    return !NodePtrUsable(PPC_LOAD_U32(child + 76));
+}
+
+// Lazily built guest-side stand-in child: evaluator-invisible, registration-safe.
+// Slot indices come from u16 fields scaled by 8, so the scratch table covers the
+// full 16-bit range.
+static uint32_t GetSinkChild(uint8_t* base)
+{
+    static std::atomic<uint32_t> s_sink{ 0 };
+    uint32_t sink = s_sink.load(std::memory_order_acquire);
+    if (sink != 0)
+        return sink;
+
+    static std::mutex s_mutex;
+    std::lock_guard lock(s_mutex);
+    sink = s_sink.load(std::memory_order_relaxed);
+    if (sink != 0)
+        return sink;
+
+    constexpr uint32_t NODE_SIZE = 128;
+    constexpr uint32_t TABLE_SIZE = 0x10000 * 8;
+    void* host = g_userHeap.AllocPhysical(NODE_SIZE + TABLE_SIZE, 16);
+    memset(host, 0, NODE_SIZE + TABLE_SIZE);
+    uint32_t guest = g_memory.MapVirtual(host);
+
+    PPC_STORE_U32(guest + 8, 0xFFFFFFFF);        // data: reads as destroyed
+    PPC_STORE_U32(guest + 76, guest + NODE_SIZE); // slot table: private scratch
+
+    s_sink.store(guest, std::memory_order_release);
+    return guest;
+}
+
+// Returns true when the node needed repair. `canSkip` callers (the clone) may
+// abandon the operation when both children are dead instead of using the sink.
+static bool RepairNodeChildren(uint8_t* base, uint32_t node, const char* who, bool& bothDead)
+{
+    bothDead = false;
+    if (!NodePtrUsable(node))
+        return false;
+
+    uint32_t childA = PPC_LOAD_U32(node + 16);
+    uint32_t childB = PPC_LOAD_U32(node + 20);
+    bool deadA = NodeChildDead(base, childA);
+    bool deadB = NodeChildDead(base, childB);
+
+    if (!deadA && !deadB)
+        return false;
+
+    static std::atomic<uint32_t> s_repairCount{ 0 };
+    uint32_t report = s_repairCount.fetch_add(1, std::memory_order_relaxed);
+
+    if (deadA && deadB)
+    {
+        bothDead = true;
+        uint32_t sink = GetSinkChild(base);
+        PPC_STORE_U32(node + 16, sink);
+        PPC_STORE_U32(node + 20, sink);
+        if (report < 8)
+            LOGF_ERROR("{}: both children of {:08X} dead ({:08X}/{:08X}), sink substituted", who, node, childA, childB);
+        return true;
+    }
+
+    uint32_t survivor = deadA ? childB : childA;
+    PPC_STORE_U32(node + (deadA ? 16 : 20), survivor);
+    if (report < 8)
+    {
+        LOGF_ERROR("{}: repaired dead child{} of {:08X} ({:08X} -> {:08X})",
+            who, deadA ? 'A' : 'B', node, deadA ? childA : childB, survivor);
+    }
+    return true;
+}
+
+// Single-node clone: copies 128 bytes from the source node (r4), including the
+// child pointers, then registers the clone in each child's slot table.
 PPC_FUNC_IMPL(__imp__sub_82F768E0);
 PPC_FUNC(sub_82F768E0)
 {
-    // Only reject pointers that cannot be dereferenced safely (null page,
-    // 0/-1 destructed/poisoned markers, or so high that +76 leaves the 4GB
-    // guest arena). Slot tables may live in the static image (0x82xxxxxx),
-    // so no upper heap bound here.
-    auto usable = [](uint32_t ptr) { return ptr >= 0x1000 && ptr < 0xFFFF0000; };
-
-    uint32_t src = ctx.r4.u32;
-    if (usable(src))
+    bool bothDead = false;
+    if (RepairNodeChildren(base, ctx.r4.u32, "sub_82F768E0", bothDead) && bothDead)
     {
-        uint32_t childA = PPC_LOAD_U32(src + 16);
-        uint32_t childB = PPC_LOAD_U32(src + 20);
+        // Callers iterate a batch and do not consume the return value; skipping
+        // a fully dead clone is cleaner than registering the sink twice more.
+        ctx.r3.u32 = 0;
+        return;
+    }
 
-        // A child is dead when its pointer is unusable or its payload reads as
-        // destructed/poisoned (data pointer at +8, slot table pointer at +76).
-        auto dead = [&](uint32_t child)
+    __imp__sub_82F768E0(ctx, base);
+}
+
+// Pool swap-remove (r3 = pool {offset, chunk array, chunk count}, r4 = node
+// being removed): the pool's last node is copied over r4 and then re-registered
+// through its child slot tables. Repair that node before the move; skipping is
+// not an option here because the pool bookkeeping must advance.
+PPC_FUNC_IMPL(__imp__sub_82F76698);
+PPC_FUNC(sub_82F76698)
+{
+    uint32_t pool = ctx.r3.u32;
+    if (NodePtrUsable(pool))
+    {
+        uint32_t offset = PPC_LOAD_U32(pool + 0);
+        uint32_t chunks = PPC_LOAD_U32(pool + 4);
+        uint32_t count = PPC_LOAD_U32(pool + 8);
+        if (NodePtrUsable(chunks) && count > 0 && offset >= 128)
         {
-            if (!usable(child))
-                return true;
-            uint32_t data = PPC_LOAD_U32(child + 8);
-            if (data == 0 || data == 0xFFFFFFFF)
-                return true;
-            return !usable(PPC_LOAD_U32(child + 76));
-        };
-
-        bool deadA = dead(childA);
-        bool deadB = dead(childB);
-
-        if (deadA || deadB)
-        {
-            static std::atomic<uint32_t> s_repairCount{ 0 };
-            uint32_t report = s_repairCount.fetch_add(1, std::memory_order_relaxed);
-
-            if (deadA && deadB)
+            uint32_t lastChunk = PPC_LOAD_U32(chunks + (count - 1) * 4);
+            if (NodePtrUsable(lastChunk))
             {
-                if (report < 8)
-                    LOGFN_ERROR("sub_82F768E0: both children dead, clone skipped (src={:08X} childA={:08X} childB={:08X})", src, childA, childB);
-                ctx.r3.u32 = 0;
-                return;
-            }
-
-            uint32_t survivor = deadA ? childB : childA;
-            PPC_STORE_U32(src + (deadA ? 16 : 20), survivor);
-            if (report < 8)
-            {
-                LOGFN_ERROR("sub_82F768E0: repaired dead child{} of {:08X} ({:08X} -> {:08X})",
-                    deadA ? 'A' : 'B', src, deadA ? childA : childB, survivor);
+                bool bothDead = false;
+                RepairNodeChildren(base, lastChunk + offset - 128, "sub_82F76698", bothDead);
             }
         }
     }
 
-    __imp__sub_82F768E0(ctx, base);
+    __imp__sub_82F76698(ctx, base);
 }
 
 #endif

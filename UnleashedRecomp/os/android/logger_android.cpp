@@ -506,7 +506,7 @@ void os::logger::Init()
     // fresh file, even if this run happens to log nothing else before a freeze.
     WriteLogRecord("[logger]", nullptr, "Unleashed Recomp log started", 28);
     static constexpr char BuildVersion[] = "=== APK VERSION: 1.5.1-roadmap-v37 (2026-07-12) ===";
-    static constexpr char BuildId[] = "ANDROID_BUILD_ID=1.5.1-roadmap-v37-diag10-clonefix";
+    static constexpr char BuildId[] = "ANDROID_BUILD_ID=1.5.1-roadmap-v37-diag11-flusherfix";
     WriteLogRecord("[build]", nullptr, BuildVersion, sizeof(BuildVersion) - 1);
     WriteLogRecord("[build]", nullptr, BuildId, sizeof(BuildId) - 1);
     LogDeviceInfo();
