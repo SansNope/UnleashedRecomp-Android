@@ -419,6 +419,81 @@ PPC_FUNC(sub_82EA8AB0)
 
 #endif
 
+#ifdef __ANDROID__
+
+// Parent-node clone (issue #27, diag9 crash site). sub_82F768E0 allocates a new
+// node via sub_82F76248, copies 128 bytes from the source node - including the
+// two child pointers at +16/+20 - and registers the clone in each child's slot
+// table (write through u32[child+76]). When a child has been destroyed early
+// (the use-after-free proven by diag8/diag9), this function both re-propagates
+// the dangling pointer into every new clone generation and, worse, writes the
+// clone's address through whatever u32[dead_child+76] now reads - randomly
+// corrupting the heap. This was the corruption amplifier all along.
+//
+// Repair the source before cloning: replace a dead child pointer (0/-1,
+// including the diag9 quarantine poison) with the surviving sibling, so the
+// slot-table registration writes to a valid table and the type-4 blend
+// degrades to blending one clip with itself (a one-frame visual artifact at
+// worst). If both children are dead, skip the clone entirely; the caller
+// iterates a batch and does not consume the return value.
+PPC_FUNC_IMPL(__imp__sub_82F768E0);
+PPC_FUNC(sub_82F768E0)
+{
+    // Only reject pointers that cannot be dereferenced safely (null page,
+    // 0/-1 destructed/poisoned markers, or so high that +76 leaves the 4GB
+    // guest arena). Slot tables may live in the static image (0x82xxxxxx),
+    // so no upper heap bound here.
+    auto usable = [](uint32_t ptr) { return ptr >= 0x1000 && ptr < 0xFFFF0000; };
+
+    uint32_t src = ctx.r4.u32;
+    if (usable(src))
+    {
+        uint32_t childA = PPC_LOAD_U32(src + 16);
+        uint32_t childB = PPC_LOAD_U32(src + 20);
+
+        // A child is dead when its pointer is unusable or its payload reads as
+        // destructed/poisoned (data pointer at +8, slot table pointer at +76).
+        auto dead = [&](uint32_t child)
+        {
+            if (!usable(child))
+                return true;
+            uint32_t data = PPC_LOAD_U32(child + 8);
+            if (data == 0 || data == 0xFFFFFFFF)
+                return true;
+            return !usable(PPC_LOAD_U32(child + 76));
+        };
+
+        bool deadA = dead(childA);
+        bool deadB = dead(childB);
+
+        if (deadA || deadB)
+        {
+            static std::atomic<uint32_t> s_repairCount{ 0 };
+            uint32_t report = s_repairCount.fetch_add(1, std::memory_order_relaxed);
+
+            if (deadA && deadB)
+            {
+                if (report < 8)
+                    LOGFN_ERROR("sub_82F768E0: both children dead, clone skipped (src={:08X} childA={:08X} childB={:08X})", src, childA, childB);
+                ctx.r3.u32 = 0;
+                return;
+            }
+
+            uint32_t survivor = deadA ? childB : childA;
+            PPC_STORE_U32(src + (deadA ? 16 : 20), survivor);
+            if (report < 8)
+            {
+                LOGFN_ERROR("sub_82F768E0: repaired dead child{} of {:08X} ({:08X} -> {:08X})",
+                    deadA ? 'A' : 'B', src, deadA ? childA : childB, survivor);
+            }
+        }
+    }
+
+    __imp__sub_82F768E0(ctx, base);
+}
+
+#endif
+
 // Animation node evaluator. The function dispatches on a type byte at +0; the type-4
 // branch interpolates between two child nodes (+16 / +20) and dereferences each child's
 // data pointer at +8 without validating it. On some devices (issue #27: Snapdragon
