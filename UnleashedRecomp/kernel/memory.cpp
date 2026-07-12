@@ -33,6 +33,21 @@ Memory::Memory()
     // reads are benign (zeros) with no visual artifacts, while faulting made the
     // game unplayable there. Indirect calls fetched through such zeros are guarded
     // separately in ppc_detail.h. Desktop builds keep the trap to catch new bugs.
+
+    // Absorber region past the arena end. Destructors of the issue #27 objects
+    // leave 0xFFFFFFFF in pointer fields; guest code that races object teardown
+    // dereferences them with positive offsets, and recompiled 64-bit address
+    // arithmetic (base + 0xFFFFFFFF + offset) lands past the 4GB arena instead
+    // of wrapping like the 360 did. Map 16MB of anonymous RW right after the
+    // arena so those accesses read zeros / scribble into a scratch area instead
+    // of faulting; the pages cost nothing until touched.
+    if (base != nullptr)
+    {
+        void* absorber = mmap(base + PPC_MEMORY_SIZE, 16ull * 1024 * 1024,
+            PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE | MAP_FIXED_NOREPLACE, -1, 0);
+        if (absorber == MAP_FAILED)
+            LOG_ERROR("Failed to map the guest arena absorber region; -1-based accesses will fault.");
+    }
 #else
     mprotect(base, 4096, PROT_NONE);
 #endif
