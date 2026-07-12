@@ -3,6 +3,7 @@
 #include <ui/achievement_menu.h>
 #include <ui/button_guide.h>
 #include <ui/options_menu.h>
+#include <ui/touch_controls.h>
 #include <locale/locale.h>
 #include <app.h>
 
@@ -127,6 +128,9 @@ PPC_FUNC(sub_824B0930)
 
     auto pHudPause = (SWA::CHudPause*)g_memory.Translate(ctx.r3.u32);
     auto pInputState = SWA::CInputState::GetInstance();
+
+    if (pHudPause->m_IsShown)
+        TouchControls::NotifyMenuVisible();
 
     g_achievementMenuIntroTime += App::s_deltaTime;
 

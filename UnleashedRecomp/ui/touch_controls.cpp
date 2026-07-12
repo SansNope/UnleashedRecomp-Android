@@ -3,6 +3,7 @@
 #include "imgui_utils.h"
 #include "button_guide.h"
 #include "game_window.h"
+#include "options_menu.h"
 #include <gpu/video.h>
 #include <sdl_listener.h>
 #include <user/config.h>
@@ -118,6 +119,17 @@ namespace
 
     std::atomic<bool> g_autoVisible{ true };
     XAMINPUT_GAMEPAD g_state{};
+
+    // ---- Adaptive context (menu / cutscene) --------------------------------
+    // Menus stamp a timestamp every frame they are visible (guest update thread);
+    // the render thread treats the flag as active while the stamp is fresh, so no
+    // destructor hooks are needed. The cutscene flag is edge-triggered from the
+    // Inspire scene ctor/dtor hooks.
+    std::atomic<uint64_t> g_menuSeenAtMs{ 0 };
+    std::atomic<bool> g_inspireSceneActive{ false };
+    constexpr uint64_t MENU_STAMP_FRESH_MS = 250;
+
+    enum class ETouchContext { Normal, Menu, Cutscene };
 
     // Finger driving the analog stick (-1 = none). Render-thread only.
     SDL_FingerID g_stickFingerId = (SDL_FingerID)-1;
@@ -291,6 +303,52 @@ namespace
         return pressed;
     }
 
+    // D-pad drawn in place of the left stick while a menu is open. The whole
+    // stick zone is the hit area; direction comes from the finger's angle with
+    // an 8-way split (diagonals press two directions), matching how the game's
+    // menus read the physical D-pad.
+    void DrawDpad(ImDrawList* dl, const std::vector<FingerPt>& fps, ImVec2 c,
+        float baseR, float zoneR, XAMINPUT_GAMEPAD& st)
+    {
+        uint16_t bits = 0;
+        for (const auto& fp : fps)
+        {
+            const float dx = fp.pos.x - c.x;
+            const float dy = fp.pos.y - c.y;
+            const float dist2 = dx * dx + dy * dy;
+            if (dist2 > zoneR * zoneR || dist2 < baseR * baseR * 0.04f)
+                continue;
+
+            // 8-way: a component counts when it carries at least half the other.
+            if (std::fabs(dx) >= std::fabs(dy) * 0.5f)
+                bits |= dx > 0.0f ? XAMINPUT_GAMEPAD_DPAD_RIGHT : XAMINPUT_GAMEPAD_DPAD_LEFT;
+            if (std::fabs(dy) >= std::fabs(dx) * 0.5f)
+                bits |= dy > 0.0f ? XAMINPUT_GAMEPAD_DPAD_DOWN : XAMINPUT_GAMEPAD_DPAD_UP;
+        }
+        st.wButtons |= bits;
+
+        dl->AddCircleFilled(c, baseR, IM_COL32(0, 0, 0, bits ? 90 : 55), 48);
+        dl->AddCircle(c, baseR, IM_COL32(255, 255, 255, 130), 48, 3.0f);
+
+        struct { float ox, oy; uint16_t bit; } dirs[4] =
+        {
+            {  0.0f, -1.0f, XAMINPUT_GAMEPAD_DPAD_UP },
+            {  1.0f,  0.0f, XAMINPUT_GAMEPAD_DPAD_RIGHT },
+            {  0.0f,  1.0f, XAMINPUT_GAMEPAD_DPAD_DOWN },
+            { -1.0f,  0.0f, XAMINPUT_GAMEPAD_DPAD_LEFT },
+        };
+        for (const auto& d : dirs)
+        {
+            const ImVec2 tip { c.x + d.ox * baseR * 0.78f, c.y + d.oy * baseR * 0.78f };
+            const ImVec2 b1  { c.x + d.ox * baseR * 0.38f - d.oy * baseR * 0.26f,
+                               c.y + d.oy * baseR * 0.38f - d.ox * baseR * 0.26f };
+            const ImVec2 b2  { c.x + d.ox * baseR * 0.38f + d.oy * baseR * 0.26f,
+                               c.y + d.oy * baseR * 0.38f + d.ox * baseR * 0.26f };
+            const bool on = (st.wButtons & d.bit) != 0;
+            dl->AddTriangleFilled(tip, b1, b2, IM_COL32(255, 255, 255, on ? 230 : 120));
+        }
+    }
+
     // Draw a control's static visual (no press detection) - used by the editor.
     void DrawElemVisual(ImDrawList* dl, int i, const ElemRect& r)
     {
@@ -410,6 +468,16 @@ const XAMINPUT_GAMEPAD& TouchControls::GetGamepadState()
     return g_state;
 }
 
+void TouchControls::NotifyMenuVisible()
+{
+    g_menuSeenAtMs.store(SDL_GetTicks64(), std::memory_order_relaxed);
+}
+
+void TouchControls::NotifyCutsceneActive(bool active)
+{
+    g_inspireSceneActive.store(active, std::memory_order_relaxed);
+}
+
 void TouchControls::Init()
 {
     // The glyph atlas is owned by ButtonGuide (initialised before us). Load the
@@ -499,6 +567,57 @@ void TouchControls::Draw()
     {
         XAMINPUT_GAMEPAD st{};
 
+        // Adaptive context: cutscenes collapse everything into one SKIP button,
+        // menus swap the analog stick for a D-pad and release the camera finger.
+        // Only Inspire scenes count as cutscenes: the WMV movie manager singleton
+        // stays alive long after playback, so it cannot be used as a signal (it
+        // locked the whole title screen into SKIP mode when tried).
+        ETouchContext context = ETouchContext::Normal;
+        if (g_inspireSceneActive.load(std::memory_order_relaxed))
+        {
+            context = ETouchContext::Cutscene;
+        }
+        else if (OptionsMenu::s_isVisible ||
+            SDL_GetTicks64() - g_menuSeenAtMs.load(std::memory_order_relaxed) < MENU_STAMP_FRESH_MS)
+        {
+            context = ETouchContext::Menu;
+        }
+
+        if (context == ETouchContext::Cutscene)
+        {
+            g_stickFingerId = (SDL_FingerID)-1;
+            g_rstickFingerId = (SDL_FingerID)-1;
+            g_camFingerId = (SDL_FingerID)-1;
+
+            // One wide SKIP button at the Start button's spot.
+            const float skipHW = MENU_HW * vh * g_layout.scale * 2.2f;
+            const float skipHH = MENU_HH * vh * g_layout.scale;
+            const ImVec2 skipC = ElemRectOf(TC_START, vw, vh).c;
+
+            std::vector<ImVec2> pts;
+            pts.reserve(fps.size());
+            for (const auto& fp : fps)
+                pts.push_back(fp.pos);
+
+            const bool pressed = AnyFingerInRect(pts,
+                { skipC.x - skipHW, skipC.y - skipHH }, { skipC.x + skipHW, skipC.y + skipHH });
+            if (pressed)
+                st.wButtons |= XAMINPUT_GAMEPAD_START;
+
+            dl->AddRectFilled({ skipC.x - skipHW, skipC.y - skipHH }, { skipC.x + skipHW, skipC.y + skipHH },
+                IM_COL32(0, 0, 0, pressed ? 150 : 90), skipHH * 0.5f);
+            dl->AddRect({ skipC.x - skipHW, skipC.y - skipHH }, { skipC.x + skipHW, skipC.y + skipHH },
+                IM_COL32(255, 255, 255, 150), skipHH * 0.5f, 0, 2.0f);
+            const char* skipLabel = "SKIP >>";
+            const ImVec2 ts = font->CalcTextSizeA(fontPx, FLT_MAX, 0.0f, skipLabel);
+            dl->AddText(font, fontPx, { skipC.x - ts.x * 0.5f, skipC.y - ts.y * 0.5f },
+                IM_COL32(255, 255, 255, pressed ? 255 : 220), skipLabel);
+
+            g_state = st;
+            g_prevIds = std::move(curIds);
+            return;
+        }
+
         // ---- Left analog stick ----
         const ImVec2 stickC(g_layout.x[TC_STICK] * vw, g_layout.y[TC_STICK] * vh);
         const float baseR  = STICK_BASE_R  * vh * g_layout.scale;
@@ -531,7 +650,7 @@ void TouchControls::Draw()
 
         ImVec2 thumbPos = stickC;
         bool stickActive = false;
-        if (stickPos)
+        if (stickPos && context != ETouchContext::Menu)
         {
             const float dx = stickPos->x - stickC.x;
             const float dy = stickPos->y - stickC.y;
@@ -551,7 +670,10 @@ void TouchControls::Draw()
         }
 
         // ---- Camera: virtual right stick ----
-        const auto cameraMode = Config::TouchCamera.Value;
+        // Menus release the camera finger: a drag there would only feed a camera
+        // nobody controls and swallow taps on the right half of the screen.
+        const auto cameraMode = context == ETouchContext::Menu
+            ? EAndroidTouchCameraMode::Off : Config::TouchCamera.Value;
         if (cameraMode == EAndroidTouchCameraMode::RightStick)
         {
             const ImVec2 rstickC(g_layout.x[TC_RSTICK] * vw, g_layout.y[TC_RSTICK] * vh);
@@ -683,9 +805,16 @@ void TouchControls::Draw()
             if (fp.id != g_stickFingerId && fp.id != g_rstickFingerId && fp.id != g_camFingerId)
                 pts.push_back(fp.pos);
 
-        dl->AddCircleFilled(stickC, baseR, IM_COL32(0, 0, 0, stickActive ? 90 : 55), 48);
-        dl->AddCircle(stickC, baseR, IM_COL32(255, 255, 255, 130), 48, 3.0f);
-        dl->AddCircleFilled(thumbPos, thumbR, IM_COL32(255, 255, 255, stickActive ? 170 : 110), 32);
+        if (context == ETouchContext::Menu)
+        {
+            DrawDpad(dl, fps, stickC, baseR, zoneR, st);
+        }
+        else
+        {
+            dl->AddCircleFilled(stickC, baseR, IM_COL32(0, 0, 0, stickActive ? 90 : 55), 48);
+            dl->AddCircle(stickC, baseR, IM_COL32(255, 255, 255, 130), 48, 3.0f);
+            dl->AddCircleFilled(thumbPos, thumbR, IM_COL32(255, 255, 255, stickActive ? 170 : 110), 32);
+        }
 
         // ---- Face buttons ----
         const float faceR = FACE_BTN_R * vh * g_layout.scale;
