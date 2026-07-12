@@ -340,6 +340,31 @@ namespace
         RecordAllocEvent(addr, size, ra, 2);
         MarkLiveRange(addr, size, false);
     }
+
+    // diag9: free quarantine. The diag8 logs proved the crash chain on every
+    // affected device: a 512-byte node (factory sub_822EBF60) is destroyed by
+    // its own deallocating destructor (sub_82ED4BB8) while a live parent blend
+    // node still references it, and within a dozen allocator events the memory
+    // is reused by sub_82BB5870's transform buffers whose float data then gets
+    // read through the dangling pointer. Hold small freed blocks in a per-thread
+    // FIFO before really freeing them, and poison the payload with 0xFF so any
+    // dangling reader sees -1 - which the evaluator guard already treats as
+    // invalid and skips deterministically. If the ring crash disappears (or its
+    // frequency collapses) with this build, the use-after-free chain is proven
+    // end to end.
+    constexpr size_t QUAR_CAP = 1024;
+    constexpr uint32_t QUAR_MAX_SIZE = 512;
+
+    struct QuarantinedFree
+    {
+        uint32_t heap;
+        uint32_t addr;
+        uint32_t size;
+    };
+
+    thread_local QuarantinedFree t_quarantine[QUAR_CAP];
+    thread_local size_t t_quarantineHead = 0;
+    thread_local size_t t_quarantineCount = 0;
 }
 
 // Guest small-block allocate(heap r3, size r4) -> r3.
@@ -358,12 +383,36 @@ PPC_FUNC(sub_82EA8A30)
 PPC_FUNC_IMPL(__imp__sub_82EA8AB0);
 PPC_FUNC(sub_82EA8AB0)
 {
+    uint32_t heap = ctx.r3.u32;
     uint32_t addr = ctx.r4.u32;
     uint32_t size = ctx.r5.u32;
     uintptr_t ra = (uintptr_t)__builtin_return_address(0);
 
     if (addr != 0)
         TrackFree(addr, size, (uint32_t)(ra - TrackModuleBase()));
+
+    // The heap instance is per-thread (fetched from TLS by the guest code), so
+    // deferring a free and completing it later from the same thread is safe.
+    if (addr != 0 && size > 0 && size <= QUAR_MAX_SIZE)
+    {
+        memset(base + addr, 0xFF, size);
+
+        if (t_quarantineCount == QUAR_CAP)
+        {
+            const QuarantinedFree oldest = t_quarantine[t_quarantineHead];
+            t_quarantineHead = (t_quarantineHead + 1) % QUAR_CAP;
+            t_quarantineCount--;
+
+            ctx.r3.u32 = oldest.heap;
+            ctx.r4.u32 = oldest.addr;
+            ctx.r5.u32 = oldest.size;
+            __imp__sub_82EA8AB0(ctx, base);
+        }
+
+        t_quarantine[(t_quarantineHead + t_quarantineCount) % QUAR_CAP] = { heap, addr, size };
+        t_quarantineCount++;
+        return;
+    }
 
     __imp__sub_82EA8AB0(ctx, base);
 }
