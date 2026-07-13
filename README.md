@@ -59,6 +59,12 @@ A raw dump (`game` + `update`, with optional `dlc`) is enough: if the `patched` 
 <details>
 <summary>Manual installation (alternative)</summary>
 
+
+A raw dump (`game` + `update`, with optional `dlc`) is enough: if the `patched` folder produced by the desktop installer is missing, the app builds the patched executable itself on first launch. No PC is required at any point.
+
+<details>
+<summary>Manual installation (alternative)</summary>
+
 - Open Android's Files app, choose **Unleashed Recomp game files**, and copy the `game`, `update`, and optional `dlc` folders from your dump into the folder shown by the app.
 - If your file manager cannot see `Android/data`, put the same folders into `Android/media/com.sega.sonicunr/UnleashedRecomp/` instead — that folder is browsable by regular file managers and the app picks it up automatically. Driver packages can likewise go into `Android/media/com.sega.sonicunr/driver_import/`.
 - Do not use `adb push` directly into `Android/data`. Files created there by the shell can receive ownership that prevents the app from reading them.
@@ -191,7 +197,7 @@ The Android-specific implementation lives primarily in:
 
 ## AI-assisted development
 
-A large part of this port was written in collaboration with AI tools — primarily Anthropic's Claude (Fable 5) model. The workflow is human-led: the maintainers set the direction, test every build on real devices, debug with testers, and decide what ships; the AI does much of the code writing, crash analysis, and reverse engineering under that guidance. It has proven effective — the "ring crash" root-cause hunt in issue #27 went through nine diagnostic builds driven this way — but it also means occasional artifacts, freezes, or audio issues can slip through. Detailed bug reports with `log.txt` attached are the most valuable contribution: they are how problems get root-caused and fixed.
+A large part of this port was written in collaboration with AI tools — primarily Anthropic's Claude (Fable 5) model. The workflow is human-led: the maintainers set the direction, test every build on real devices, debug with testers, and decide what ships; the AI does much of the code writing, crash analysis, and reverse engineering under that guidance. It has proven effective but it also means occasional artifacts, freezes, or audio issues can slip through. Detailed bug reports with `log.txt` attached are the most valuable contribution: they are how problems get root-caused and fixed.
 
 ## Legal
 
