@@ -91,4 +91,14 @@
     <string-array name="touch_camera_labels">
         <item>Wischen auf dem Bildschirm</item><item>Rechter Stick</item><item>Aus</item>
     </string-array>
+    <string name="documents_save_title">Unleashed Recomp Spielstände</string>
+    <string name="documents_save_summary">Speicherdaten (SYS-DATA) und Mod-Speicherstände</string>
+    <string name="launcher_open_saves">Speicherordner öffnen</string>
+    <string name="launcher_controls_moved">Bildschirmsteuerung, Kamera und Stick befinden sich jetzt im Optionsmenü im Spiel (Eingabe). Passe sie dort während des Spielens an.</string>
+    <string name="launcher_force_bc">Native BC-Texturen erzwingen (ETC2-Transcode deaktivieren; nur für GPUs mit BC-Unterstützung)</string>
+    <string name="mod_manager_codes">Codes</string>
+    <string name="mod_manager_codes_hint">Integrierte Patches, die beim Start angewendet werden. Werden mit der Mod-Liste gespeichert; starte das Spiel neu, um sie anzuwenden.</string>
+    <string name="launcher_localization">Fan-Lokalisierung</string>
+    <string name="launcher_localization_none">Keine (Originalspiel)</string>
+    <string name="launcher_localization_summary">Wähle ein optionales Paket aus localizations/. Seine Dateien überschreiben die passenden Ressourcen der Basissprache, ohne den Spiel-Dump zu verändern.</string>
 </resources>

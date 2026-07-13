@@ -33,6 +33,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -52,11 +53,29 @@ public final class ModManagerActivity extends Activity {
     private static final int MAX_SCAN_DEPTH = 4;
     private static final int MAX_SCANNED_FILES = 1000;
 
+    // Built-in codes understood by the native loader (config_def.h [Codes] section).
+    // Names must match exactly - the loader turns on the matching hidden config value
+    // at boot. SkipIntroLogos is intentionally omitted: the launcher already exposes
+    // it. Codes found in the database but absent here are preserved and still toggleable.
+    private static final String[][] CODE_DEFS = {
+        { "AllowCancellingUnleash", "Allow cancelling Unleash" },
+        { "DisableAutoSaveWarning", "Disable auto-save warning" },
+        { "DisableBoostFilter", "Disable boost filter" },
+        { "DisableDLCIcon", "Disable DLC icon" },
+        { "DisableDPadMovement", "Disable D-pad movement" },
+        { "FixEggmanlandUsingEventGalleryTransition", "Fix Eggmanland event-gallery transition" },
+        { "FixUnleashOutOfControlDrain", "Fix Unleash out-of-control drain" },
+        { "HomingAttackOnJump", "Homing attack on jump" },
+        { "SaveScoreAtCheckpoints", "Save score at checkpoints" },
+        { "UseAlternateTitle", "Use alternate title" },
+        { "UseArrowsForTimeOfDayTransition", "Use arrows for time-of-day transition" },
+    };
+
     private final List<ModEntry> mods = new ArrayList<>();
     private LinearLayout modList;
     private TextView status;
     private int scannedFiles;
-    private Map<String, String> preservedCodes = Collections.emptyMap();
+    private final LinkedHashSet<String> enabledCodes = new LinkedHashSet<>();
 
     private static final class ModEntry {
         final File iniFile;
@@ -159,10 +178,22 @@ public final class ModManagerActivity extends Activity {
         File managerDatabase = new File(userDirectory, MOD_DATABASE_NAME);
         File sourceDatabase = findSourceDatabase(userDirectory, managerDatabase);
         Map<String, Map<String, String>> sourceIni = readIni(sourceDatabase);
+        enabledCodes.clear();
         Map<String, String> oldCodes = sourceIni.get("Codes");
-        preservedCodes = oldCodes != null
-            ? new LinkedHashMap<>(oldCodes)
-            : Collections.emptyMap();
+        if (oldCodes != null) {
+            int codeCount;
+            try {
+                codeCount = Integer.parseInt(oldCodes.getOrDefault("CodeCount", "0"));
+            } catch (NumberFormatException exception) {
+                codeCount = 0;
+            }
+            for (int index = 0; index < codeCount; index++) {
+                String name = oldCodes.get("Code" + index);
+                if (name != null && !name.trim().isEmpty()) {
+                    enabledCodes.add(name.trim());
+                }
+            }
+        }
         List<String> activePaths = readActivePaths(sourceIni);
         Set<String> enabledPaths = new HashSet<>(activePaths);
 
@@ -298,6 +329,7 @@ public final class ModManagerActivity extends Activity {
             empty.setPadding(0, dp(24), 0, dp(24));
             empty.setGravity(Gravity.CENTER);
             modList.addView(empty, matchWrap());
+            addCodesSection();
             return;
         }
 
@@ -328,6 +360,59 @@ public final class ModManagerActivity extends Activity {
             row.addView(down, squareButton());
 
             modList.addView(row, matchWrap());
+        }
+
+        addCodesSection();
+    }
+
+    // Built-in cheat/patch codes (issue #75). The native ModLoader reads these from the
+    // mods database [Codes] section at boot; unknown codes already in the database are
+    // shown as-is so they can be turned off without hand-editing the file.
+    private void addCodesSection() {
+        TextView header = new TextView(this);
+        header.setText(R.string.mod_manager_codes);
+        header.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        header.setPadding(0, dp(18), 0, dp(2));
+        modList.addView(header, matchWrap());
+
+        TextView hint = new TextView(this);
+        hint.setText(R.string.mod_manager_codes_hint);
+        hint.setPadding(0, 0, 0, dp(6));
+        modList.addView(hint, matchWrap());
+
+        Set<String> known = new HashSet<>();
+        for (String[] def : CODE_DEFS) {
+            final String name = def[0];
+            known.add(name);
+            CheckBox box = new CheckBox(this);
+            box.setText(def[1]);
+            box.setChecked(enabledCodes.contains(name));
+            box.setOnCheckedChangeListener((button, checked) -> {
+                if (checked) {
+                    enabledCodes.add(name);
+                } else {
+                    enabledCodes.remove(name);
+                }
+            });
+            modList.addView(box, matchWrap());
+        }
+
+        for (String name : new ArrayList<>(enabledCodes)) {
+            if (known.contains(name)) {
+                continue;
+            }
+            final String extra = name;
+            CheckBox box = new CheckBox(this);
+            box.setText(name);
+            box.setChecked(true);
+            box.setOnCheckedChangeListener((button, checked) -> {
+                if (checked) {
+                    enabledCodes.add(extra);
+                } else {
+                    enabledCodes.remove(extra);
+                }
+            });
+            modList.addView(box, matchWrap());
         }
     }
 
@@ -371,15 +456,10 @@ public final class ModManagerActivity extends Activity {
                     .append(mods.get(index).canonicalPath).append("\"\n");
             }
             db.append("\n[Codes]\n");
-            if (preservedCodes.isEmpty()) {
-                db.append("CodeCount=0\n");
-            } else {
-                for (Map.Entry<String, String> code : preservedCodes.entrySet()) {
-                    String encoded = encodeIniValue(code.getValue());
-                    if (encoded != null) {
-                        db.append(code.getKey()).append('=').append(encoded).append('\n');
-                    }
-                }
+            db.append("CodeCount=").append(enabledCodes.size()).append('\n');
+            int codeIndex = 0;
+            for (String code : enabledCodes) {
+                db.append("Code").append(codeIndex++).append('=').append(code).append('\n');
             }
             writeAtomic(database, db.toString());
 

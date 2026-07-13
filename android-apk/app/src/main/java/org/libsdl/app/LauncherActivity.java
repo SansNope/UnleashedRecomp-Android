@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -56,13 +57,11 @@ public final class LauncherActivity extends Activity {
     private Button playButton;
     private Spinner driverSpinner;
     private Spinner renderSpinner;
-    private Spinner touchSpinner;
-    private Spinner touchCameraSpinner;
-    private CheckBox showFps;
-    private CheckBox showProfiler;
     private CheckBox skipIntro;
     private CheckBox validation;
     private CheckBox gfxCapture;
+    private CheckBox forceBc;
+    private SharedPreferences prefs;
     private InstallState lastInstallState;
 
     private static final class InstallState {
@@ -77,6 +76,7 @@ public final class LauncherActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        prefs = getPreferences(MODE_PRIVATE);
         setContentView(buildPage());
         loadSettings();
     }
@@ -105,12 +105,13 @@ public final class LauncherActivity extends Activity {
         files.addView(installStatus);
         files.addView(button(R.string.launcher_install_game, view -> chooseInstallSource(true)));
         LinearLayout fileButtons = row();
-        fileButtons.addView(button(R.string.launcher_open_files, view -> openFiles("game:")), weighted());
+        fileButtons.addView(button(R.string.launcher_open_files, view -> openFiles("game")), weighted());
         fileButtons.addView(button(R.string.launcher_recheck, view -> refreshStatuses()), weighted());
         files.addView(fileButtons);
+        files.addView(button(R.string.launcher_open_saves, view -> openFiles("save")));
         page.addView(files);
 
-        LinearLayout graphics = card(R.string.launcher_graphics);
+        LinearLayout graphics = collapsibleCard(page, R.string.launcher_graphics, "expand_graphics", false);
         driverStatus = statusText();
         graphics.addView(driverStatus);
         driverSpinner = settingSpinner(graphics, R.string.launcher_driver,
@@ -119,43 +120,38 @@ public final class LauncherActivity extends Activity {
             R.array.render_mode_labels);
         LinearLayout driverButtons = row();
         driverButtons.addView(button(R.string.launcher_import_driver, view -> chooseDriver()), weighted());
-        driverButtons.addView(button(R.string.launcher_driver_folder, view -> openFiles("transfer:")), weighted());
+        driverButtons.addView(button(R.string.launcher_driver_folder, view -> openFiles("transfer")), weighted());
         graphics.addView(driverButtons);
-        page.addView(graphics);
 
+        // The runtime touch settings (on-screen controls, camera and stick) now live
+        // in the in-game options menu; only the layout editor stays here as it launches
+        // the game renderer.
         LinearLayout controls = card(R.string.launcher_controls);
-        touchSpinner = settingSpinner(controls, R.string.launcher_touch_policy,
-            R.array.touch_policy_labels);
-        touchCameraSpinner = settingSpinner(controls, R.string.launcher_touch_camera,
-            R.array.touch_camera_labels);
+        controls.addView(text(getString(R.string.launcher_controls_moved), 14, false));
         Button editLayout = button(R.string.launcher_edit_layout, view -> launchLayoutEditor());
         controls.addView(editLayout);
         page.addView(controls);
 
-        LinearLayout mods = card(R.string.launcher_mods);
+        LinearLayout mods = collapsibleCard(page, R.string.launcher_mods, "expand_mods", false);
         mods.addView(text(getString(R.string.launcher_mods_summary), 14, false));
         LinearLayout modButtons = row();
         modButtons.addView(button(R.string.launcher_manage_mods,
             view -> startActivity(new Intent(this, ModManagerActivity.class))), weighted());
         modButtons.addView(button(R.string.launcher_install_mod, view -> chooseInstallSource(false)), weighted());
         mods.addView(modButtons);
-        page.addView(mods);
 
-        LinearLayout debug = card(R.string.launcher_debug);
-        showFps = checkBox(R.string.launcher_show_fps);
-        showProfiler = checkBox(R.string.launcher_show_profiler);
+        LinearLayout debug = collapsibleCard(page, R.string.launcher_debug, "expand_debug", false);
         skipIntro = checkBox(R.string.launcher_skip_intro);
         validation = checkBox(R.string.launcher_validation);
         gfxCapture = checkBox(R.string.launcher_gfx_capture);
-        debug.addView(showFps);
-        debug.addView(showProfiler);
+        forceBc = checkBox(R.string.launcher_force_bc);
         debug.addView(skipIntro);
         debug.addView(validation);
         debug.addView(gfxCapture);
+        debug.addView(forceBc);
         diagnosticsStatus = statusText();
         debug.addView(diagnosticsStatus);
-        debug.addView(button(R.string.launcher_open_logs, view -> openFiles("transfer:")));
-        page.addView(debug);
+        debug.addView(button(R.string.launcher_open_logs, view -> openFiles("transfer")));
 
         playButton = button(R.string.launcher_play, view -> launchGame(false));
         playButton.setTextSize(18);
@@ -254,31 +250,23 @@ public final class LauncherActivity extends Activity {
             new String[] {"Auto", "System", "Bundled", "Vauzi710", "Imported"});
         select(renderSpinner, config.get("Video.RenderMode"),
             new String[] {"Auto", "GMEM", "Sysmem"});
-        select(touchSpinner, config.get("Input.TouchControls"),
-            new String[] {"Auto", "Always On", "Off"});
-        select(touchCameraSpinner, config.get("Input.TouchCamera"),
-            new String[] {"Touch Area", "Right Stick", "Off"});
-        showFps.setChecked(Boolean.parseBoolean(config.get("Video.ShowFPS")));
-        showProfiler.setChecked(Boolean.parseBoolean(config.get("Video.ShowProfiler")));
         skipIntro.setChecked(Boolean.parseBoolean(config.get("Codes.SkipIntroLogos")));
         validation.setChecked(new File(getFilesDir(), "turnip/vk_layer_settings.txt").isFile());
         gfxCapture.setChecked(new File(AppStorage.driverImportDir(this), "gfxrecon_capture.txt").isFile());
+        forceBc.setChecked(new File(getFilesDir(), "force_bc.txt").isFile());
     }
 
     private boolean saveSettings() {
         LinkedHashMap<String, String> values = new LinkedHashMap<>();
         values.put("Video.VulkanDriver", quote(new String[] {"Auto", "System", "Bundled", "Vauzi710", "Imported"}[driverSpinner.getSelectedItemPosition()]));
         values.put("Video.RenderMode", quote(new String[] {"Auto", "GMEM", "Sysmem"}[renderSpinner.getSelectedItemPosition()]));
-        values.put("Video.ShowFPS", Boolean.toString(showFps.isChecked()));
-        values.put("Video.ShowProfiler", Boolean.toString(showProfiler.isChecked()));
-        values.put("Input.TouchControls", quote(new String[] {"Auto", "Always On", "Off"}[touchSpinner.getSelectedItemPosition()]));
-        values.put("Input.TouchCamera", quote(new String[] {"Touch Area", "Right Stick", "Off"}[touchCameraSpinner.getSelectedItemPosition()]));
         values.put("Codes.SkipIntroLogos", Boolean.toString(skipIntro.isChecked()));
         try {
             patchConfig(AppStorage.configFile(this), values);
             setMarker(new File(getFilesDir(), "turnip/vk_layer_settings.txt"), validation.isChecked(),
                 "khronos_validation.enables = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT\n");
             setMarker(new File(AppStorage.driverImportDir(this), "gfxrecon_capture.txt"), gfxCapture.isChecked(), "");
+            setMarker(new File(getFilesDir(), "force_bc.txt"), forceBc.isChecked(), "");
             return true;
         } catch (IOException exception) {
             showError(getString(R.string.error_settings_save, exception.getMessage()));
@@ -676,10 +664,9 @@ public final class LauncherActivity extends Activity {
             ? name.substring(0, name.length() - 4) : name;
     }
 
-    private void openFiles(String documentId) {
+    private void openFiles(String rootId) {
         try {
-            Uri directory = DocumentsContract.buildRootUri(getPackageName() + ".documents",
-                documentId.startsWith("game") ? "game" : "transfer");
+            Uri directory = DocumentsContract.buildRootUri(getPackageName() + ".documents", rootId);
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(directory, "vnd.android.document/root");
             intent.setClipData(ClipData.newRawUri("Unleashed Recomp files", directory));
@@ -702,6 +689,40 @@ public final class LauncherActivity extends Activity {
         title.setPadding(0, 0, 0, dp(7));
         card.addView(title);
         return card;
+    }
+
+    /**
+     * A card whose body collapses/expands when its header is tapped. The expanded
+     * state is remembered per card in the activity preferences. Adds itself to
+     * {@code page} and returns the body layout for the caller to populate.
+     */
+    private LinearLayout collapsibleCard(LinearLayout page, int titleId, String stateKey, boolean defaultExpanded) {
+        LinearLayout card = column();
+        card.setPadding(dp(14), dp(12), dp(14), dp(12));
+        card.setBackgroundColor(Color.rgb(245, 245, 245));
+        LinearLayout.LayoutParams params = matchWrap();
+        params.bottomMargin = dp(12);
+        card.setLayoutParams(params);
+
+        final LinearLayout body = column();
+        final boolean expanded = prefs.getBoolean(stateKey, defaultExpanded);
+        body.setVisibility(expanded ? View.VISIBLE : View.GONE);
+
+        final String label = getString(titleId);
+        final TextView title = text(label, 19, true);
+        title.setPadding(0, 0, 0, dp(7));
+        title.setText((expanded ? "▾  " : "▸  ") + label);
+        title.setOnClickListener(view -> {
+            boolean nowExpanded = body.getVisibility() != View.VISIBLE;
+            body.setVisibility(nowExpanded ? View.VISIBLE : View.GONE);
+            title.setText((nowExpanded ? "▾  " : "▸  ") + label);
+            prefs.edit().putBoolean(stateKey, nowExpanded).apply();
+        });
+
+        card.addView(title);
+        card.addView(body);
+        page.addView(card);
+        return body;
     }
 
     private Spinner settingSpinner(LinearLayout parent, int labelId, int arrayId) {

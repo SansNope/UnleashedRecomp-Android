@@ -32,7 +32,7 @@ The main development targets are Adreno 710, 725, 732, and 750. Adreno 720 and 7
 
 **Mali support is experimental.** Recent Mali GPUs (Valhall generation and newer with a Vulkan 1.3 driver — e.g. G610/G615/G710/G715/G720) run the game through the stock system driver: the app detects a non-Adreno GPU automatically and skips the bundled Adreno driver. Textures are decompressed on the CPU when the driver lacks BC format support, which increases memory usage. Confirmed working on a Dimensity 8300 Ultra (Mali-G615). Older Mali generations (Bifrost and earlier) cannot work.
 
-PowerVR and Samsung Xclipse are untested. On Xclipse devices the system driver is used by default; community compatibility packages from [ExynosTools](https://github.com/WearyConcern1165/ExynosTools) can be dropped into `driver_import/` as a `.zip` to use them instead.
+PowerVR and Samsung Xclipse are untested. On Xclipse devices the system driver is used by default; community compatibility packages from [ExynosTools](https://github.com/WearyConcern1165/ExynosTools) can be dropped into `driver_import/` as a `.zip` to use them instead. If such a GPU supports BC texture formats natively, the launcher's **Debug** section has an experimental **Force native BC textures** toggle that skips the CPU-side ETC2 transcode ([issue #72](https://github.com/SansNope/UnleashedRecomp-Android/issues/72)); leave it off on Adreno/Turnip, which genuinely lacks BC.
 
 ## Before you install
 
@@ -80,6 +80,16 @@ During in-engine cutscenes the controls collapse into a single **SKIP** button; 
 
 Every control can be repositioned and resized: tap **Arrange touch controls** in the launcher to open the drag-to-arrange editor.
 
+The layout adapts to context: the left stick becomes a directional pad in menus, on the world map, and on the results and level-up screens, and everything collapses to a single **SKIP** button during cutscenes and the attract movie.
+
+On-screen control settings live in the game's own options menu under **Input**:
+
+- **On-screen controls** — when the touch overlay is shown (Auto, Always on, Off).
+- **Touch camera** — swipe on the right side of the screen, a dedicated right stick, or off.
+- **On-screen stick** — a virtual analog stick, or an 8-way D-pad you can also use during gameplay ([issue #68](https://github.com/SansNope/UnleashedRecomp-Android/issues/68)).
+
+The **Video** category adds **Show FPS** and **Show Profiler** toggles. To drag the on-screen buttons into a custom arrangement, use **Arrange touch controls** in the launcher.
+
 When a physical controller sends input, the touch overlay hides itself. Touch the screen again to bring it back.
 
 USB and Bluetooth controllers supported by SDL should work without additional setup. In-game prompts may not match every third-party controller exactly.
@@ -93,6 +103,8 @@ USB and Bluetooth controllers supported by SDL should work without additional se
 Mods can also be copied into the `mods` folder manually through Android Files (each mod in its own folder with a `mod.ini`); tap **Refresh** in the manager afterwards.
 
 The manager writes standard `cpkredir.ini` and `ModsDB.ini` files. Relative paths from desktop mod packs are also supported, so most HMM/UMM layouts can be copied without manually rewriting every path. Desktop-only code mods or mods that depend on Windows DLLs will not work on Android.
+
+The mod manager also has a **Codes** section listing built-in game patches — for example *Homing attack on jump*, *Save score at checkpoints*, or *Skip intro logos*. Tick the ones you want and save the mod list; codes are applied on the next launch ([issue #75](https://github.com/SansNope/UnleashedRecomp-Android/issues/75)).
 
 ## Graphics drivers
 

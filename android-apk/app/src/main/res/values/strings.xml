@@ -91,4 +91,15 @@
     <string-array name="touch_camera_labels">
         <item>Swipe on screen</item><item>Right stick</item><item>Off</item>
     </string-array>
+
+    <string name="documents_save_title">Unleashed Recomp saves</string>
+    <string name="documents_save_summary">Save data (SYS-DATA) and per-mod saves</string>
+    <string name="launcher_open_saves">Open saves folder</string>
+    <string name="launcher_controls_moved">On-screen controls, camera and stick moved to the in-game options menu (Input). Adjust them there while playing.</string>
+    <string name="launcher_force_bc">Force native BC textures (disable ETC2 transcode; only for GPUs that support BC)</string>
+    <string name="mod_manager_codes">Codes</string>
+    <string name="mod_manager_codes_hint">Built-in patches applied at boot. Saved with the mod list; restart the game to apply.</string>
+    <string name="launcher_localization">Fan localization</string>
+    <string name="launcher_localization_none">None (original game)</string>
+    <string name="launcher_localization_summary">Select an optional package from localizations/. Its files override the matching base-language resources without modifying the game dump.</string>
 </resources>

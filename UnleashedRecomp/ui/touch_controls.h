@@ -28,11 +28,13 @@ public:
 
     // Game-context signals for the adaptive layout. NotifyMenuVisible must be
     // called every frame a navigation menu is on screen (the flag decays on its
-    // own); the cutscene flag is edge-triggered from scene ctor/dtor hooks. In a
-    // menu the left stick becomes a D-pad; in a cutscene everything collapses to
-    // a single SKIP button.
+    // own); the cutscene flag is edge-triggered from scene ctor/dtor hooks;
+    // NotifyMovieVisible is stamped per rendered WMV frame (attract movie, opening
+    // and the like) and decays like the menu flag. In a menu the left stick becomes
+    // a D-pad; in a cutscene or movie everything collapses to a single SKIP button.
     static void NotifyMenuVisible();
     static void NotifyCutsceneActive(bool active);
+    static void NotifyMovieVisible();
 
     static void Init();
     static void Draw();

@@ -80,11 +80,16 @@ namespace
 
     // Default layout. X-offsets that were expressed in height units in the old
     // fixed layout are baked here at the reference 2400x1080 aspect.
+    //
+    // The A/B/X/Y diamond is centred on (0.865, 0.760); its half-extents are
+    // widened from the original (0.049 x, 0.108 y) so the four face buttons sit
+    // further apart and are harder to mishit - especially the horizontal pair,
+    // which the compressed default packed almost edge to edge.
     const Layout kDefault =
     {
         //  stick    A       B       X       Y      LB      RB      LT      RT     Start   Back   rstick
-        {  0.135f, 0.865f, 0.914f, 0.816f, 0.865f, 0.075f, 0.925f, 0.075f, 0.925f, 0.555f, 0.445f, 0.680f },
-        {  0.760f, 0.868f, 0.760f, 0.760f, 0.652f, 0.090f, 0.090f, 0.185f, 0.185f, 0.070f, 0.070f, 0.820f },
+        {  0.135f, 0.865f, 0.927f, 0.803f, 0.865f, 0.075f, 0.925f, 0.075f, 0.925f, 0.555f, 0.445f, 0.680f },
+        {  0.760f, 0.885f, 0.760f, 0.760f, 0.635f, 0.090f, 0.090f, 0.185f, 0.185f, 0.070f, 0.070f, 0.820f },
         1.0f
     };
 
@@ -128,6 +133,11 @@ namespace
     std::atomic<uint64_t> g_menuSeenAtMs{ 0 };
     std::atomic<bool> g_inspireSceneActive{ false };
     constexpr uint64_t MENU_STAMP_FRESH_MS = 250;
+
+    // WMV playback stamp (movie renderer, guest render path). Slightly longer
+    // freshness than the menu stamp: movies decode at ~30 FPS and may hiccup.
+    std::atomic<uint64_t> g_movieSeenAtMs{ 0 };
+    constexpr uint64_t MOVIE_STAMP_FRESH_MS = 400;
 
     enum class ETouchContext { Normal, Menu, Cutscene };
 
@@ -478,6 +488,11 @@ void TouchControls::NotifyCutsceneActive(bool active)
     g_inspireSceneActive.store(active, std::memory_order_relaxed);
 }
 
+void TouchControls::NotifyMovieVisible()
+{
+    g_movieSeenAtMs.store(SDL_GetTicks64(), std::memory_order_relaxed);
+}
+
 void TouchControls::Init()
 {
     // The glyph atlas is owned by ButtonGuide (initialised before us). Load the
@@ -569,11 +584,14 @@ void TouchControls::Draw()
 
         // Adaptive context: cutscenes collapse everything into one SKIP button,
         // menus swap the analog stick for a D-pad and release the camera finger.
-        // Only Inspire scenes count as cutscenes: the WMV movie manager singleton
-        // stays alive long after playback, so it cannot be used as a signal (it
-        // locked the whole title screen into SKIP mode when tried).
+        // Cutscenes are Inspire scenes (edge-triggered ctor/dtor hooks) plus live
+        // WMV playback such as the attract movie (per-frame stamp from the movie
+        // renderer - the movie manager singleton outlives playback, so its mere
+        // presence is not usable as a signal: it locked the whole title screen
+        // into SKIP mode when tried).
         ETouchContext context = ETouchContext::Normal;
-        if (g_inspireSceneActive.load(std::memory_order_relaxed))
+        if (g_inspireSceneActive.load(std::memory_order_relaxed) ||
+            SDL_GetTicks64() - g_movieSeenAtMs.load(std::memory_order_relaxed) < MOVIE_STAMP_FRESH_MS)
         {
             context = ETouchContext::Cutscene;
         }
@@ -583,16 +601,23 @@ void TouchControls::Draw()
             context = ETouchContext::Menu;
         }
 
+        // The left input renders and reads as a D-pad in menus always, and in
+        // gameplay too when the player opted in (issue #68). Cutscenes use neither.
+        const bool useDpad = context == ETouchContext::Menu ||
+            (context == ETouchContext::Normal &&
+             Config::TouchStickMode == EAndroidTouchStickMode::Dpad);
+
         if (context == ETouchContext::Cutscene)
         {
             g_stickFingerId = (SDL_FingerID)-1;
             g_rstickFingerId = (SDL_FingerID)-1;
             g_camFingerId = (SDL_FingerID)-1;
 
-            // One wide SKIP button at the Start button's spot.
+            // One wide SKIP button tucked into the top-right corner, away from the
+            // achievement overlay (top centre) and any subtitles (bottom).
             const float skipHW = MENU_HW * vh * g_layout.scale * 2.2f;
             const float skipHH = MENU_HH * vh * g_layout.scale;
-            const ImVec2 skipC = ElemRectOf(TC_START, vw, vh).c;
+            const ImVec2 skipC = { vw - skipHW - vh * 0.03f, vh * 0.03f + skipHH };
 
             std::vector<ImVec2> pts;
             pts.reserve(fps.size());
@@ -650,7 +675,7 @@ void TouchControls::Draw()
 
         ImVec2 thumbPos = stickC;
         bool stickActive = false;
-        if (stickPos && context != ETouchContext::Menu)
+        if (stickPos && !useDpad)
         {
             const float dx = stickPos->x - stickC.x;
             const float dy = stickPos->y - stickC.y;
@@ -805,7 +830,7 @@ void TouchControls::Draw()
             if (fp.id != g_stickFingerId && fp.id != g_rstickFingerId && fp.id != g_camFingerId)
                 pts.push_back(fp.pos);
 
-        if (context == ETouchContext::Menu)
+        if (useDpad)
         {
             DrawDpad(dl, fps, stickC, baseR, zoneR, st);
         }
