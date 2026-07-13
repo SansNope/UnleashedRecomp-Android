@@ -326,6 +326,63 @@ int main(int argc, char *argv[])
 
     HostStartup();
 
+// ISO Dumper
+#ifdef __ANDROID__
+{
+    std::filesystem::path root = GetGamePath();
+    std::filesystem::path stagingDir = root / "to_install";
+    std::error_code ec;
+    if (std::filesystem::exists(stagingDir, ec) && !Installer::checkGameInstall(root, modulePath))
+    {
+        Installer::Input input;
+        // locate the .iso or game folder inside stagingDir
+        for (auto& entry : std::filesystem::directory_iterator(stagingDir, ec))
+        {
+            if (Installer::parseGame(entry.path()))
+                input.gameSource = entry.path();
+            else if (Installer::parseUpdate(entry.path()))
+                input.updateSource = entry.path();
+            else if (Installer::parseDLC(entry.path()) != DLC::Unknown)
+                input.dlcSources.push_back(entry.path());
+        }
+
+        Installer::Journal journal;
+        Installer::Sources sources;
+        bool installSucceeded = false;
+
+        if (Installer::parseSources(input, journal, sources))
+        {
+           installSucceeded = Installer::install(sources, root, /*skipHashChecks*/ false, journal,
+               std::chrono::seconds(0), []() { return true; });
+        }
+
+        if (installSucceeded)
+        {
+            std::error_code removeEc;
+            std::filesystem::remove_all(stagingDir, removeEc);
+            
+            if (removeEc)
+               LOGN_WARNING("Failed to remove staging directory after install: {}", removeEc.message());
+
+            char resultText[512];
+            snprintf(resultText, sizeof(resultText), "%s", Localise("IntegrityCheck_Success").c_str());
+            fprintf(stdout, "%s\n", resultText);
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, GameWindow::GetTitle(), resultText, GameWindow::s_pWindow);
+        }
+        else
+        {
+            Installer::rollback(journal);
+
+            char resultText[512];
+            snprintf(resultText, sizeof(resultText), Localise("IntegrityCheck_Failed").c_str(), journal.lastErrorMessage.c_str());
+            fprintf(stderr, "%s\n", resultText);
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, GameWindow::GetTitle(), resultText, GameWindow::s_pWindow);
+            std::_Exit(int(journal.lastResult));
+        }
+    }
+}
+#endif
+
 #ifdef __ANDROID__
     // The desktop installer wizard produces patched/default.xex; the Android
     // launcher's installer only copies files the user points it at. When a raw
@@ -377,6 +434,8 @@ int main(int argc, char *argv[])
                 "Game files not found.\n\n"
                 "Copy your Sonic Unleashed dump folders (game, update, dlc) into:\n\n"
                 "%s\n\n"
+                "Alternative: copy the game's iso, update and dlcs into:\n\n"
+                "%s/to_install\n\n"
                 "The folder is accessible from a PC over a USB cable.\n"
                 "Restart the app after copying.",
                 (const char *)GetGamePath().u8string().c_str());
