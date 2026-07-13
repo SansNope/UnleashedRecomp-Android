@@ -33,6 +33,7 @@ public final class UnleashedDocumentsProvider extends DocumentsProvider {
     private static final String TAG = "UnleashedDocuments";
     private static final String ROOT_GAME = "game";
     private static final String ROOT_TRANSFER = "transfer";
+    private static final String ROOT_SAVE = "save";
 
     private static final String[] DEFAULT_ROOT_PROJECTION = new String[] {
         Root.COLUMN_ROOT_ID,
@@ -220,6 +221,12 @@ public final class UnleashedDocumentsProvider extends DocumentsProvider {
             requireContext().getString(R.string.documents_game_title),
             requireContext().getString(R.string.documents_game_summary),
             activeGame));
+
+        roots.add(new RootInfo(
+            ROOT_SAVE,
+            requireContext().getString(R.string.documents_save_title),
+            requireContext().getString(R.string.documents_save_summary),
+            AppStorage.saveDir(requireContext())));
 
         if (externalFiles != null) {
             roots.add(new RootInfo(

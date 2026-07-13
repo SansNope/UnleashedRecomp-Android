@@ -16,7 +16,8 @@ CONFIG_DEFINE_LOCALISED("Input", bool, Vibration, true);
 CONFIG_DEFINE_LOCALISED("Input", bool, AllowBackgroundInput, false);
 #ifdef __ANDROID__
 CONFIG_DEFINE_ENUM_LOCALISED("Input", EAndroidTouchControlsPolicy, TouchControls, EAndroidTouchControlsPolicy::Auto);
-CONFIG_DEFINE_ENUM("Input", EAndroidTouchCameraMode, TouchCamera, EAndroidTouchCameraMode::TouchArea);
+CONFIG_DEFINE_ENUM_LOCALISED("Input", EAndroidTouchCameraMode, TouchCamera, EAndroidTouchCameraMode::TouchArea);
+CONFIG_DEFINE_ENUM_LOCALISED("Input", EAndroidTouchStickMode, TouchStickMode, EAndroidTouchStickMode::Analog);
 #endif
 CONFIG_DEFINE_ENUM_LOCALISED("Input", EControllerIcons, ControllerIcons, EControllerIcons::Auto);
 
@@ -75,10 +76,10 @@ CONFIG_DEFINE_LOCALISED("Video", bool, Fullscreen, true);
 CONFIG_DEFINE_LOCALISED("Video", bool, VSync, true);
 CONFIG_DEFINE_ENUM("Video", ETripleBuffering, TripleBuffering, ETripleBuffering::Auto);
 CONFIG_DEFINE_LOCALISED("Video", int32_t, FPS, 60);
-CONFIG_DEFINE("Video", bool, ShowFPS, false);
+CONFIG_DEFINE_LOCALISED("Video", bool, ShowFPS, false);
 // Android: initial visibility of the profiler overlay (no F1 key there; toggled from
-// the launcher, and closing the overlay in-game persists as off). Desktop uses F1.
-CONFIG_DEFINE("Video", bool, ShowProfiler, false);
+// the in-game Video menu, and closing the overlay in-game persists as off). Desktop uses F1.
+CONFIG_DEFINE_LOCALISED("Video", bool, ShowProfiler, false);
 CONFIG_DEFINE("Video", uint32_t, MaxFrameLatency, 2);
 CONFIG_DEFINE_LOCALISED("Video", float, Brightness, 0.5f);
 #ifdef __ANDROID__

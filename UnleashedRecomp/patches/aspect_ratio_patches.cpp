@@ -9,6 +9,7 @@
 #include "aspect_ratio_patches.h"
 #include "camera_patches.h"
 #include "inspire_patches.h"
+#include <ui/touch_controls.h>
 
 // These are here for now to not recompile basically all of the project.
 namespace Chao::CSD
@@ -790,7 +791,7 @@ static const xxHashMap<CsdModifier> g_modifiers =
     { HashStr("ui_worldmap_help/balloon/help_window/position/msg_bg_r"), { EXTEND_RIGHT } },
 };
 
-static std::optional<CsdModifier> FindModifier(uint32_t data)
+static std::optional<CsdModifier> FindModifier(uint32_t data, XXH64_hash_t* outPathHash = nullptr)
 {
     XXH64_hash_t path;
     {
@@ -803,12 +804,31 @@ static std::optional<CsdModifier> FindModifier(uint32_t data)
         path = findResult->second;
     }
 
+    if (outPathHash != nullptr)
+        *outPathHash = path;
+
     auto findResult = g_modifiers.find(path);
     if (findResult != g_modifiers.end())
         return findResult->second;
 
     return {};
 }
+
+// Screens that count as menus for the touch overlay (the game reads the D-pad
+// there): stage results and the level-up (status) screen. Their scenes only
+// render while the screen is up, so a per-frame stamp from Scene::Render is a
+// reliable signal.
+static const XXH64_hash_t g_menuScenePaths[] =
+{
+    HashStr("ui_result/footer/result_footer"),
+    HashStr("ui_result/main/result_title"),
+    HashStr("ui_itemresult/footer/result_footer"),
+    HashStr("ui_itemresult/main/iresult_title"),
+    HashStr("ui_result_ex/footer/result_footer"),
+    HashStr("ui_result_ex/main/result_title"),
+    HashStr("ui_status/footer/status_footer"),
+    HashStr("ui_status/header/status_title"),
+};
 
 static std::optional<CsdModifier> g_sceneModifier;
 static float g_corners[8];
@@ -849,7 +869,17 @@ PPC_FUNC(sub_830BC640)
 PPC_FUNC_IMPL(__imp__sub_830C6A00);
 PPC_FUNC(sub_830C6A00)
 {
-    g_sceneModifier = FindModifier(ctx.r3.u32);
+    XXH64_hash_t scenePath = 0;
+    g_sceneModifier = FindModifier(ctx.r3.u32, &scenePath);
+
+    for (auto& menuPath : g_menuScenePaths)
+    {
+        if (menuPath == scenePath)
+        {
+            TouchControls::NotifyMenuVisible();
+            break;
+        }
+    }
 
     if (g_sceneModifier.has_value())
     {

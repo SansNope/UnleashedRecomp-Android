@@ -91,4 +91,14 @@
     <string-array name="touch_camera_labels">
         <item>画面スワイプ</item><item>右スティック</item><item>オフ</item>
     </string-array>
+    <string name="documents_save_title">Unleashed Recomp のセーブデータ</string>
+    <string name="documents_save_summary">セーブデータ（SYS-DATA）とMODごとのセーブ</string>
+    <string name="launcher_open_saves">セーブフォルダーを開く</string>
+    <string name="launcher_controls_moved">画面上のボタン・カメラ・スティックはゲーム内のオプションメニュー（入力）に移動しました。プレイ中にそこで調整できます。</string>
+    <string name="launcher_force_bc">ネイティブBCテクスチャを強制（ETC2トランスコードを無効化。BC対応GPU専用）</string>
+    <string name="mod_manager_codes">コード</string>
+    <string name="mod_manager_codes_hint">起動時に適用される内蔵パッチ。MODリストと一緒に保存されます。適用するにはゲームを再起動してください。</string>
+    <string name="launcher_localization">ファン翻訳</string>
+    <string name="launcher_localization_none">なし（オリジナル版）</string>
+    <string name="launcher_localization_summary">localizations/ から任意のパッケージを選択します。ゲームのダンプを変更せず、対応する基本言語のリソースを上書きします。</string>
 </resources>

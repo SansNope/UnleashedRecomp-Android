@@ -51,6 +51,12 @@ CONFIG_DEFINE_ENUM_TEMPLATE(EAndroidTouchCameraMode)
     { "Off",         EAndroidTouchCameraMode::Off }
 };
 
+CONFIG_DEFINE_ENUM_TEMPLATE(EAndroidTouchStickMode)
+{
+    { "Analog", EAndroidTouchStickMode::Analog },
+    { "D-Pad",  EAndroidTouchStickMode::Dpad }
+};
+
 CONFIG_DEFINE_ENUM_TEMPLATE(SDL_Scancode)
 {
     { "???", SDL_SCANCODE_UNKNOWN },

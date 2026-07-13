@@ -74,11 +74,20 @@ static bool DrawContainer(ImVec2 min, ImVec2 max, float cornerRadius = 25)
     return false;
 }
 
+// Dequeue achievements only in the main thread. This is also extra thread safety.
+// Captured in Init() instead of a static initializer: on Android the library is loaded
+// on the Java UI thread, so a static initializer would capture the wrong thread and
+// CanDequeueAchievement() would never pass. A default-constructed id matches no thread,
+// which keeps dequeueing disabled until Init() runs on the game main thread.
+static std::thread::id g_mainThreadId;
+
 void AchievementOverlay::Init()
 {
     auto& io = ImGui::GetIO();
 
     g_fntSeurat = ImFontAtlasSnapshot::GetFont("FOT-SeuratPro-M.otf");
+
+    g_mainThreadId = std::this_thread::get_id();
 }
 
 // Dequeue achievements only when we can actually play sounds.
@@ -91,9 +100,6 @@ PPC_FUNC(sub_82B43480)
     g_soundAdministratorUpdated = true;
     __imp__sub_82B43480(ctx, base);
 }
-
-// Dequeue achievements only in the main thread. This is also extra thread safety.
-static std::thread::id g_mainThreadId = std::this_thread::get_id();
 
 static bool CanDequeueAchievement()
 {

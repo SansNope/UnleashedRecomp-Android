@@ -1250,6 +1250,8 @@ static void DrawConfigOptions()
 #endif
 #ifdef __ANDROID__
             DrawConfigOption(rowCount++, yOffset, &Config::TouchControls, true);
+            DrawConfigOption(rowCount++, yOffset, &Config::TouchCamera, true);
+            DrawConfigOption(rowCount++, yOffset, &Config::TouchStickMode, true);
 #endif
             DrawConfigOption(rowCount++, yOffset, &Config::ControllerIcons, true);
             break;
@@ -1304,6 +1306,12 @@ static void DrawConfigOptions()
             DrawConfigOption(rowCount++, yOffset, &Config::XboxColorCorrection, true);
             DrawConfigOption(rowCount++, yOffset, &Config::CutsceneAspectRatio, true);
             DrawConfigOption(rowCount++, yOffset, &Config::UIAlignmentMode, true);
+#ifdef __ANDROID__
+            // Diagnostic overlays: Android has no F1 key, so they are toggled here
+            // (moved out of the launcher). They take effect immediately.
+            DrawConfigOption(rowCount++, yOffset, &Config::ShowFPS, true);
+            DrawConfigOption(rowCount++, yOffset, &Config::ShowProfiler, true);
+#endif
 
             break;
         }

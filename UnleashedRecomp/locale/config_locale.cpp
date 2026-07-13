@@ -389,6 +389,52 @@ CONFIG_DEFINE_ENUM_LOCALE(EAndroidTouchControlsPolicy)
     }
 };
 
+// Android-only option; other languages fall back to English until the Android UI is translated.
+CONFIG_DEFINE_LOCALE(TouchCamera)
+{
+    { ELanguage::English, { "Touch Camera", "Choose how the camera is controlled by touch. Changes apply immediately." } }
+};
+
+CONFIG_DEFINE_ENUM_LOCALE(EAndroidTouchCameraMode)
+{
+    {
+        ELanguage::English,
+        {
+            { EAndroidTouchCameraMode::TouchArea,  { "SWIPE ON SCREEN", "Swipe on Screen: drag anywhere on the free right half of the screen to move the camera." } },
+            { EAndroidTouchCameraMode::RightStick, { "RIGHT STICK", "Right Stick: control the camera with a dedicated on-screen right stick." } },
+            { EAndroidTouchCameraMode::Off,        { "OFF", "Off: disable touch camera control." } }
+        }
+    }
+};
+
+// Android-only option; other languages fall back to English until the Android UI is translated.
+CONFIG_DEFINE_LOCALE(TouchStickMode)
+{
+    { ELanguage::English, { "On-Screen Stick", "Choose the left on-screen input style. The D-pad is always used in menus. Changes apply immediately." } }
+};
+
+CONFIG_DEFINE_ENUM_LOCALE(EAndroidTouchStickMode)
+{
+    {
+        ELanguage::English,
+        {
+            { EAndroidTouchStickMode::Analog, { "ANALOG STICK", "Analog Stick: a virtual thumbstick with full analog range." } },
+            { EAndroidTouchStickMode::Dpad,   { "D-PAD", "D-Pad: an 8-way digital pad in gameplay, like the one used on the world map." } }
+        }
+    }
+};
+
+// Android-only menu entries; other languages fall back to English until the Android UI is translated.
+CONFIG_DEFINE_LOCALE(ShowFPS)
+{
+    { ELanguage::English, { "Show FPS", "Show the frames-per-second counter in the corner of the screen." } }
+};
+
+CONFIG_DEFINE_LOCALE(ShowProfiler)
+{
+    { ELanguage::English, { "Show Profiler", "Show the performance profiler overlay with per-frame timing graphs." } }
+};
+
 // Japanese Notes: This localization should include furigana.
 CONFIG_DEFINE_LOCALE(MasterVolume)
 {

@@ -91,4 +91,14 @@
     <string-array name="touch_camera_labels">
         <item>Glisser sur l\'écran</item><item>Stick droit</item><item>Désactivé</item>
     </string-array>
+    <string name="documents_save_title">Sauvegardes Unleashed Recomp</string>
+    <string name="documents_save_summary">Données de sauvegarde (SYS-DATA) et sauvegardes par mod</string>
+    <string name="launcher_open_saves">Ouvrir le dossier des sauvegardes</string>
+    <string name="launcher_controls_moved">Les commandes tactiles, la caméra et le stick ont été déplacés dans le menu des options du jeu (Entrée). Réglez-les directement en jeu.</string>
+    <string name="launcher_force_bc">Forcer les textures BC natives (désactiver le transcodage ETC2 ; uniquement pour les GPU compatibles BC)</string>
+    <string name="mod_manager_codes">Codes</string>
+    <string name="mod_manager_codes_hint">Correctifs intégrés appliqués au démarrage. Enregistrés avec la liste des mods ; redémarrez le jeu pour les appliquer.</string>
+    <string name="launcher_localization">Localisation par les fans</string>
+    <string name="launcher_localization_none">Aucune (jeu original)</string>
+    <string name="launcher_localization_summary">Sélectionnez un paquet optionnel dans localizations/. Ses fichiers remplacent les ressources correspondantes de la langue de base sans modifier les fichiers du jeu.</string>
 </resources>

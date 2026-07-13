@@ -46,6 +46,11 @@ final class AppStorage {
         return new File(activeGameRoot(context), ".config/UnleashedRecomp/config.toml");
     }
 
+    /** Where native paths.cpp keeps save data: <game root>/.config/UnleashedRecomp/save. */
+    static File saveDir(Context context) {
+        return new File(activeGameRoot(context), ".config/UnleashedRecomp/save");
+    }
+
     static File transferRoot(Context context) {
         File external = context.getExternalFilesDir(null);
         return external != null ? external : context.getFilesDir();

@@ -91,4 +91,14 @@
     <string-array name="touch_camera_labels">
         <item>Scorrimento sullo schermo</item><item>Stick destro</item><item>Disattivato</item>
     </string-array>
+    <string name="documents_save_title">Salvataggi di Unleashed Recomp</string>
+    <string name="documents_save_summary">Dati di salvataggio (SYS-DATA) e salvataggi per mod</string>
+    <string name="launcher_open_saves">Apri cartella salvataggi</string>
+    <string name="launcher_controls_moved">I controlli su schermo, la telecamera e lo stick sono stati spostati nel menu opzioni di gioco (Controlli). Regolali lì durante il gioco.</string>
+    <string name="launcher_force_bc">Forza texture BC native (disattiva la transcodifica ETC2; solo per GPU che supportano BC)</string>
+    <string name="mod_manager_codes">Codici</string>
+    <string name="mod_manager_codes_hint">Patch integrate applicate all\'avvio. Salvate con l\'elenco dei mod; riavvia il gioco per applicarle.</string>
+    <string name="launcher_localization">Localizzazione dei fan</string>
+    <string name="launcher_localization_none">Nessuna (gioco originale)</string>
+    <string name="launcher_localization_summary">Seleziona un pacchetto opzionale da localizations/. I suoi file sostituiscono le risorse della lingua di base corrispondente senza modificare il dump del gioco.</string>
 </resources>

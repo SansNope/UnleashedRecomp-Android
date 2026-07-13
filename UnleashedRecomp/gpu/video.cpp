@@ -2085,6 +2085,21 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
             g_capabilities.textureCompressionBC = false;
             LOG_WARNING("force_no_bc.txt present: BC texture support disabled to test the fallback paths.");
         }
+
+        // Opposite override (issue #72): force the native BC path even if BC was not
+        // reported, skipping the ETC2/EAC transcode and its per-texture CPU overhead.
+        // Only correct on GPUs that actually support BC (e.g. Xclipse) but end up on
+        // the fallback path anyway; on Adreno/Turnip, which genuinely lacks BC, this
+        // WILL corrupt textures. The launcher's "force native BC" debug option writes
+        // the marker; it is gated behind Debug options for that reason.
+        std::error_code forceBcEc;
+        if (!g_capabilities.textureCompressionBC &&
+            (std::filesystem::exists(os::android::GetExternalFilesDir() / "driver_import" / "force_bc.txt", forceBcEc) ||
+             std::filesystem::exists(os::android::GetInternalFilesDir() / "force_bc.txt", forceBcEc)))
+        {
+            g_capabilities.textureCompressionBC = true;
+            LOG_WARNING("force_bc.txt present: forcing native BC textures and disabling ETC2 transcode. Textures will corrupt if this GPU lacks BC support.");
+        }
     }
 #endif
 
@@ -6672,6 +6687,10 @@ static void ScreenShaderInit(be<uint32_t>* a1, uint32_t a2, uint32_t a3, GuestVe
 
 void MovieRendererMidAsmHook(PPCRegister& r3)
 {
+    // Runs once per rendered WMV frame: the touch overlay uses it to collapse
+    // into a SKIP button for the whole playback (attract movie included).
+    TouchControls::NotifyMovieVisible();
+
     auto device = reinterpret_cast<GuestDevice*>(g_memory.Translate(r3.u32));
 
     // Force linear filtering & clamp addressing

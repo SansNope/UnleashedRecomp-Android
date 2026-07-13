@@ -92,4 +92,15 @@
     <string-array name="touch_camera_labels">
         <item>Свайп по экрану</item><item>Правый стик</item><item>Выключено</item>
     </string-array>
+
+    <string name="documents_save_title">Сохранения Unleashed Recomp</string>
+    <string name="documents_save_summary">Данные сохранений (SYS-DATA) и сохранения модов</string>
+    <string name="launcher_open_saves">Открыть папку сохранений</string>
+    <string name="launcher_controls_moved">Экранные кнопки, камера и стик перенесены во внутриигровое меню опций (раздел «Управление»). Настраивайте их прямо в игре.</string>
+    <string name="launcher_force_bc">Форсировать нативные BC-текстуры (отключить ETC2-транскод; только для GPU с поддержкой BC)</string>
+    <string name="mod_manager_codes">Коды</string>
+    <string name="mod_manager_codes_hint">Встроенные патчи, применяемые при запуске. Сохраняются вместе со списком модов; для применения перезапустите игру.</string>
+    <string name="launcher_localization">Фанатская локализация</string>
+    <string name="launcher_localization_none">Нет (оригинальная игра)</string>
+    <string name="launcher_localization_summary">Выберите необязательный пакет из localizations/. Его файлы подменят ресурсы базового языка, не изменяя исходный дамп игры.</string>
 </resources>
