@@ -80,10 +80,16 @@
     <string name="error_install_no_mod">選択したソースに mod.ini が含まれていないため、MODが見つかりませんでした。</string>
 
     <string-array name="driver_labels">
-        <item>自動（推奨）</item><item>システム</item><item>同梱 Turnip</item><item>Adreno 710 (Vauzi)</item><item>A725 Performance（実験的・sysmem+nobin）</item><item>インポート済み</item>
+        <item>自動（推奨）</item><item>システム</item><item>同梱 Turnip</item><item>Adreno 710 (Vauzi)</item><item>A725 Performance（実験的・sysmem+nobin）</item><item>Adreno 8xx Experimental (sysmem+flushall)</item><item>インポート済み</item>
     </string-array>
     <string-array name="render_mode_labels">
         <item>自動（推奨）</item><item>GMEM</item><item>Sysmem</item>
+    </string-array>
+    <string name="launcher_audio">オーディオ</string>
+    <string name="launcher_audio_preset">オーディオプリセット</string>
+    <string name="launcher_audio_preset_hint">起動時から音が出ない場合は AYN を選択してください（AYN Odin 2 / Thor など）。POCO F8 Ultra プロファイルは、この端末向けに試験的な低遅延 AAudio 経路を有効にします。他の端末では音割れや無音が発生する可能性があります。次回起動時に適用されます。</string>
+    <string-array name="audio_preset_labels">
+        <item>デフォルト（推奨）</item><item>AYN（携帯ゲーム機）</item><item>POCO F8 Ultra（低遅延）</item>
     </string-array>
     <string-array name="touch_policy_labels">
         <item>自動</item><item>常に表示</item><item>オフ</item>

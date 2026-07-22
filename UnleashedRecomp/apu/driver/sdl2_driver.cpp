@@ -35,7 +35,7 @@ extern "C" int Android_JNI_RouteAudioOutput(int device_id);
 // wakeup it invokes the guest once per elapsed slot, submissions land in a small FIFO. The
 // SDL device callback (large chunks, no low-latency modes) only memcpy's from the FIFO and
 // plays silence when it runs dry - it never blocks and never touches guest state. The clock
-// starts CUSHION_FRAMES in the past so a jitter-absorbing cushion builds during the very
+// starts the configured number of cushion frames in the past so a jitter-absorbing cushion builds during the very
 // first wakeups (boot, before any streaming) and is never rebuilt mid-game above real time.
 // If the FIFO is full the producer skips guest calls (stock backpressure semantics) - unless
 // the device looks dead (no consumption for DEVICE_DEAD_NANOS), in which case frames are
@@ -50,25 +50,55 @@ static bool g_downMixToStereo;
 
 #if APU_PULL_MODEL
 
-// Device-side chunk. On Android small buffers select aggressive low-latency paths (MMAP)
-// that our workload cannot feed reliably and does not need; 4 guest frames per chunk keeps
-// Bluetooth and 1024-burst HALs comfortable.
+struct AudioPresetSettings
+{
+    const char* name;
+    uint16_t deviceSamples;
+    size_t cushionFrames;
+    size_t routePrefillFrames;
+    bool keepDefaultRouteDuringBoot;
+    bool useAAudioLowLatency;
+};
+
+// Device-side chunks stay conservative in every preset. The POCO F8 Ultra profile opts into
+// AAudio's low-latency performance path and reduces our FIFO cushion; the generic profiles
+// keep the non-MMAP path that is known to be more robust on other Snapdragon devices.
 #ifdef __ANDROID__
-#define APU_DEVICE_SAMPLES (XAUDIO_NUM_SAMPLES * 4)
-// Sixteen guest frames leave three 1024-sample device callbacks of scheduling headroom,
-// while avoiding the 128 ms steady-state delay of the previous 24-frame cushion.
-static constexpr size_t CUSHION_FRAMES = 16;
-static constexpr size_t ROUTE_PREFILL_FRAMES = 16;
+static AudioPresetSettings ResolveAudioPresetSettings()
+{
+    switch (Config::AndroidAudioPreset)
+    {
+    case EAndroidAudioPreset::AYN:
+        return { "AYN", XAUDIO_NUM_SAMPLES * 4, 16, 16, true, false };
+    case EAndroidAudioPreset::LowLatency:
+        return { "POCOF8Ultra", XAUDIO_NUM_SAMPLES * 4, 8, 8, false, true };
+    case EAndroidAudioPreset::Default:
+    default:
+        return { "Default", XAUDIO_NUM_SAMPLES * 4, 16, 16, false, false };
+    }
+}
 #else
-#define APU_DEVICE_SAMPLES XAUDIO_NUM_SAMPLES
-static constexpr size_t CUSHION_FRAMES = 12;
-static constexpr size_t ROUTE_PREFILL_FRAMES = 12;
+static AudioPresetSettings ResolveAudioPresetSettings()
+{
+    return { "Default", XAUDIO_NUM_SAMPLES, 12, 12, false, false };
+}
+#endif
+
+// Resolved again after the user configuration is loaded, before SDL audio is initialized.
+// Avoid reading Config from a cross-translation-unit static initializer.
+#ifdef __ANDROID__
+static AudioPresetSettings g_audioPresetSettings{ "Default", XAUDIO_NUM_SAMPLES * 4, 16, 16, false, false };
+#else
+static AudioPresetSettings g_audioPresetSettings{ "Default", XAUDIO_NUM_SAMPLES, 12, 12, false, false };
 #endif
 
 static constexpr size_t FIFO_CAPACITY_FRAMES = 64;
 static constexpr int64_t DEVICE_DEAD_NANOS = 1'000'000'000; // 1 s without consumption = stalled stream
 static constexpr int64_t ROUTE_REMOVE_DEBOUNCE_NANOS = 500'000'000; // output sink removed (BT off)
 static constexpr int64_t ROUTE_BT_ADD_DEBOUNCE_NANOS = 1'000'000'000; // wait for A2DP codec before reopen
+// Android's initial registerAudioDeviceCallback burst delivers every existing output as an
+// "added" event moments after audio init; adds inside this window are enumeration, not hotplug.
+static constexpr int64_t BOOT_ENUMERATION_WINDOW_NANOS = 15'000'000'000;
 static constexpr int64_t ROUTE_BT_ADD_RETRY_NANOS = 500'000'000;
 static constexpr int ROUTE_BT_ADD_MAX_ATTEMPTS = 4;
 static constexpr uint32_t DRIFT_CORRECTION_MIN_DRY_CALLBACKS = 3; // avoid pulsing on brief underruns
@@ -99,6 +129,7 @@ static std::atomic<bool> g_rebuildCushion{}; // reset slot clock to boot-style c
 static std::atomic<bool> g_deferUnpauseUntilPrefilled{}; // route change: pause until full cushion refills
 static std::atomic<int64_t> g_driftCorrectionHoldoffUntil{};
 static std::atomic<int64_t> g_firstDeviceOpenTime{}; // for early-boot BT debounce
+static std::atomic<int64_t> g_audioSystemInitTime{}; // set once at init; anchors the boot enumeration window
 static std::atomic<bool> g_appInBackground{}; // app minimized — must not resume playback
 static bool g_lastCallSubmitted; // did the last guest invocation submit a frame?
 
@@ -130,7 +161,7 @@ static void MaybeResumePlaybackAfterPrefill()
     fifoBytes = g_fifoUsed;
     SDL_UnlockAudioDevice(g_audioDevice);
 
-    if (fifoBytes < ROUTE_PREFILL_FRAMES * FrameBytes())
+    if (fifoBytes < g_audioPresetSettings.routePrefillFrames * FrameBytes())
         return;
 
     g_deferUnpauseUntilPrefilled.store(false, std::memory_order_relaxed);
@@ -260,14 +291,29 @@ static void TryProcessAudioRouteChange()
     int androidId = g_pendingRouteAndroidId.exchange(0, std::memory_order_relaxed);
     const int outputIndex = g_pendingOutputDeviceIndex.load(std::memory_order_relaxed);
 
-    if (isAdd && androidId != 0)
-    {
-#ifdef __ANDROID__
-        LOGF("Audio route change: opening routed output {} directly for Android id {}.", outputIndex, androidId);
-#endif
-    }
+    int routedIndex = isAdd ? outputIndex : -1;
 
-    PerformRouteReopen(isAdd ? "output added" : "output removed", isAdd ? outputIndex : -1, !isAdd);
+#ifdef __ANDROID__
+    // AYN preset: multi-output handhelds enumerate sinks the pinned reopen can land on
+    // that produce no audible sound (AYN Thor: last id = an inaudible sink -> total
+    // silence from launch). Adds inside the boot enumeration window reopen the system
+    // default route instead; real hotplug later (BT mid-game) still pins to the new
+    // device, which nullptr reopens historically failed to pick up.
+    if (routedIndex >= 0 && g_audioPresetSettings.keepDefaultRouteDuringBoot &&
+        MonotonicNanos() - g_audioSystemInitTime.load(std::memory_order_relaxed) < BOOT_ENUMERATION_WINDOW_NANOS)
+    {
+        LOGF("Audio route change: boot-window output add (Android id {}) - AYN preset keeps the default route.", androidId);
+        routedIndex = -1;
+    }
+    else if (isAdd && androidId != 0)
+    {
+        LOGF("Audio route change: opening routed output {} directly for Android id {}.", outputIndex, androidId);
+    }
+#else
+    (void)androidId;
+#endif
+
+    PerformRouteReopen(isAdd ? "output added" : "output removed", routedIndex, !isAdd);
 }
 
 static void PauseAudioForBackground()
@@ -310,7 +356,7 @@ static void ResumeAudioFromForeground()
     Android_JNI_ResumeAudioOutput();
 #endif
 
-    LOGF("Audio background resume: rebuilding {}-frame cushion.", CUSHION_FRAMES);
+    LOGF("Audio background resume: rebuilding {}-frame cushion.", g_audioPresetSettings.cushionFrames);
 }
 
 extern "C" void Unleashed_AppSetPaused(int paused)
@@ -461,9 +507,9 @@ static void AudioThread()
 
     constexpr auto INTERVAL = std::chrono::nanoseconds(1000000000ns * XAUDIO_NUM_SAMPLES / XAUDIO_SAMPLES_HZ);
 
-    // Start the slot clock in the past so the first wakeups legitimately owe CUSHION_FRAMES
+    // Start the slot clock in the past so the first wakeups legitimately owe the configured
     // extra slots - the cushion builds at boot without any mid-game catch-up mechanism.
-    int64_t startTime = MonotonicNanos() - CUSHION_FRAMES * INTERVAL.count();
+    int64_t startTime = MonotonicNanos() - g_audioPresetSettings.cushionFrames * INTERVAL.count();
     uint64_t producedSlots = 0;
     int64_t lastDriftCorrection = 0;
     int64_t lastUnderrunLog = 0;
@@ -483,7 +529,7 @@ static void AudioThread()
 
         if (g_rebuildCushion.exchange(false, std::memory_order_acq_rel))
         {
-            startTime = MonotonicNanos() - CUSHION_FRAMES * INTERVAL.count();
+            startTime = MonotonicNanos() - g_audioPresetSettings.cushionFrames * INTERVAL.count();
             producedSlots = 0;
             lastDriftCorrection = 0;
         }
@@ -609,7 +655,7 @@ static void CreateAudioDevice()
     desired.format = AUDIO_F32SYS;
     desired.channels = surround ? XAUDIO_NUM_CHANNELS : 2;
 #if APU_PULL_MODEL
-    desired.samples = APU_DEVICE_SAMPLES;
+    desired.samples = g_audioPresetSettings.deviceSamples;
     desired.callback = AudioDeviceCallback;
 #else
     desired.samples = XAUDIO_NUM_SAMPLES;
@@ -699,6 +745,11 @@ void XAudioInitializeSystem()
     SDL_SetHint(SDL_HINT_AUDIO_CATEGORY, "playback");
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_APP_NAME, "Unleashed Recompiled");
 
+    g_audioPresetSettings = ResolveAudioPresetSettings();
+#ifdef __ANDROID__
+    SDL_SetHint("UNLEASHED_AAUDIO_LOW_LATENCY", g_audioPresetSettings.useAAudioLowLatency ? "1" : "0");
+#endif
+
     if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0)
     {
         LOGFN_ERROR("Failed to init audio subsystem: {}", SDL_GetError());
@@ -707,7 +758,15 @@ void XAudioInitializeSystem()
 
     LOGF("SDL audio driver: \"{}\".", SDL_GetCurrentAudioDriver());
 
+    LOGF("Audio preset: {} (device samples {}, cushion {} frames / {} ms, route prefill {} frames, AAudio low latency {}).",
+        g_audioPresetSettings.name, g_audioPresetSettings.deviceSamples,
+        g_audioPresetSettings.cushionFrames,
+        g_audioPresetSettings.cushionFrames * XAUDIO_NUM_SAMPLES * 1000 / XAUDIO_SAMPLES_HZ,
+        g_audioPresetSettings.routePrefillFrames,
+        g_audioPresetSettings.useAAudioLowLatency ? "on" : "off");
+
 #if APU_PULL_MODEL
+    g_audioSystemInitTime.store(MonotonicNanos(), std::memory_order_relaxed);
     SDL_EventState(SDL_AUDIODEVICEADDED, SDL_ENABLE);
     SDL_EventState(SDL_AUDIODEVICEREMOVED, SDL_ENABLE);
     SDL_AddEventWatch(AudioHotplugWatch, nullptr);

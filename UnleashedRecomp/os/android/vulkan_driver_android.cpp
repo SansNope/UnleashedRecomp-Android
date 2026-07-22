@@ -46,6 +46,9 @@ static constexpr const char *VAUZI_710_DRIVER_NAME = "vulkan.vauzi710_v2_7.so";
 static constexpr const char *VAUZI_710_DRIVER_ASSET = "bundled_driver/vulkan.vauzi710_v2_7.so";
 static constexpr const char *EXPERIMENTAL_A725_DRIVER_NAME = "vulkan.wb26_2_rp_pair_ccu_color_a725.so";
 static constexpr const char *EXPERIMENTAL_A725_DRIVER_ASSET = "bundled_driver/vulkan.wb26_2_rp_pair_ccu_color_a725.so";
+// The A8xx profile deliberately reuses the same gen8-capable binary. Only its forced
+// TU_DEBUG preset differs, so carrying a second 19 MB copy in the APK would be wasteful.
+static constexpr const char *EXPERIMENTAL_A8XX_DRIVER_NAME = EXPERIMENTAL_A725_DRIVER_NAME;
 static constexpr const char *DEFAULT_DRIVER_NAME = "vulkan.unleashed26_1_wfm_a732.so";
 static constexpr const char *LAST_IMPORTED_DRIVER_FILE = "last_imported_driver.txt";
 static constexpr const char *VULKAN_STARTUP_STATE_FILE = "vulkan_startup_state.txt";
@@ -140,6 +143,7 @@ static const char *VulkanDriverName(EAndroidVulkanDriver driver)
         case EAndroidVulkanDriver::Bundled:  return "Bundled";
         case EAndroidVulkanDriver::Vauzi710: return "Vauzi710";
         case EAndroidVulkanDriver::ExperimentalA725: return "ExperimentalA725";
+        case EAndroidVulkanDriver::ExperimentalA8xx: return "ExperimentalA8xx";
         case EAndroidVulkanDriver::Imported: return "Imported";
         case EAndroidVulkanDriver::Auto:
         default:                             return "Auto";
@@ -283,7 +287,7 @@ static bool ReadVulkanStartupState(VulkanStartupState &state, bool &stateFileExi
             "version=%u\nphase=%63s\nconfigured_driver=%u\nconfigured_render_mode=%u",
             &version, phase, &configuredDriver, &configuredRenderMode) != 4 ||
         version != 1 ||
-        configuredDriver > unsigned(EAndroidVulkanDriver::ExperimentalA725) ||
+        configuredDriver > unsigned(EAndroidVulkanDriver::ExperimentalA8xx) ||
         configuredRenderMode > unsigned(EAndroidRenderMode::Sysmem))
     {
         return false;
@@ -1134,6 +1138,11 @@ void *AndroidGetCustomVulkanLoader()
             LOG("Android Vulkan driver mode: A725 Performance (experimental CCU COLOR pair).");
             break;
 
+        case EAndroidVulkanDriver::ExperimentalA8xx:
+            driverName = EXPERIMENTAL_A8XX_DRIVER_NAME;
+            LOG("Android Vulkan driver mode: Adreno 8xx Experimental (CCU COLOR pair).");
+            break;
+
         case EAndroidVulkanDriver::Imported:
             driverName = GetImportedDriverName(turnipDir);
             LOG("Android Vulkan driver mode: Imported.");
@@ -1226,6 +1235,13 @@ void *AndroidGetCustomVulkanLoader()
         effectiveRenderMode = EAndroidRenderMode::Sysmem;
         driverTuDebugPreset = "sysmem,nobin";
         LOG("A725 Performance experimental driver: forcing TU_DEBUG=sysmem,nobin.");
+    }
+
+    if (g_runtimeVulkanDriver == EAndroidVulkanDriver::ExperimentalA8xx)
+    {
+        effectiveRenderMode = EAndroidRenderMode::Sysmem;
+        driverTuDebugPreset = "sysmem,flushall";
+        LOG("Adreno 8xx Experimental driver: forcing TU_DEBUG=sysmem,flushall.");
     }
 
     ApplyRenderMode(effectiveRenderMode, driverTuDebugPreset == nullptr, driverTuDebugPreset);

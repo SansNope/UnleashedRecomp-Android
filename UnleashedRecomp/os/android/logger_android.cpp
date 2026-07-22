@@ -17,6 +17,7 @@
 #include <signal.h>
 #include <sys/syscall.h>
 #include <sys/system_properties.h>
+#include <sys/utsname.h>
 #include <ucontext.h>
 #include <unistd.h>
 
@@ -40,6 +41,12 @@ static bool s_logFileOpenAttempted = false;
 // Raw descriptor of log.txt for the crash handler, which cannot take s_logMutex or use
 // stdio. The stream is unbuffered, so raw write() interleaves at line granularity.
 static std::atomic<int> s_logRawFd{ -1 };
+static std::atomic<uint64_t> s_runId{ 0 };
+
+// Double-buffered so the crash handler can read a complete, NUL-terminated location
+// without taking a lock while the game thread publishes a new stage name.
+static char s_testLocations[2][128] = { "startup", "startup" };
+static std::atomic<unsigned> s_testLocationIndex{ 0 };
 
 static int GetTid()
 {
@@ -55,6 +62,29 @@ static double MonotonicSeconds()
 
 static const double s_startSeconds = MonotonicSeconds();
 
+static uint64_t NextPersistentRunId(const std::filesystem::path& dir)
+{
+    const std::filesystem::path path = dir / "run_counter.txt";
+    uint64_t previous = 0;
+
+    if (FILE* file = fopen(path.c_str(), "rb"))
+    {
+        unsigned long long stored = 0;
+        if (fscanf(file, "%llu", &stored) == 1)
+            previous = static_cast<uint64_t>(stored);
+        fclose(file);
+    }
+
+    const uint64_t next = previous == UINT64_MAX ? 1 : previous + 1;
+    if (FILE* file = fopen(path.c_str(), "wb"))
+    {
+        fprintf(file, "%llu\n", static_cast<unsigned long long>(next));
+        fclose(file);
+    }
+
+    return next;
+}
+
 // Caller must hold s_logMutex. Opens the file lazily because external storage can
 // only be resolved once SDL/JNI is up, which is later than the first log lines.
 static FILE* GetLogFileLocked()
@@ -68,12 +98,26 @@ static FILE* GetLogFileLocked()
 
     s_logFileOpenAttempted = true;
 
-    // Keep the previous run's log for one generation: a tester may relaunch before
-    // copying the file that captured the freeze.
+    const uint64_t runId = NextPersistentRunId(dir);
+    s_runId.store(runId, std::memory_order_release);
+
+    // Keep both the familiar one-generation log_prev.txt and a run-numbered archive.
+    // Testers can complete an A/B series and copy all log*.txt files once at the end.
     std::error_code ec;
     std::filesystem::path path = dir / "log.txt";
     if (std::filesystem::exists(path, ec))
-        std::filesystem::rename(path, dir / "log_prev.txt", ec);
+    {
+        const std::filesystem::path previousPath = dir / "log_prev.txt";
+        std::filesystem::copy_file(path, previousPath,
+            std::filesystem::copy_options::overwrite_existing, ec);
+
+        char archiveName[64];
+        snprintf(archiveName, sizeof(archiveName), "log_run_%06llu.txt",
+            static_cast<unsigned long long>(runId > 0 ? runId - 1 : 0));
+        const std::filesystem::path archivePath = dir / archiveName;
+        std::filesystem::remove(archivePath, ec);
+        std::filesystem::rename(path, archivePath, ec);
+    }
 
     s_logFile = fopen(path.c_str(), "wb");
     if (s_logFile != nullptr)
@@ -358,6 +402,18 @@ static void CrashSignalHandler(int signal, siginfo_t* info, void* contextPtr)
     const int fd = s_logRawFd.load(std::memory_order_acquire);
     if (fd >= 0)
     {
+        const uint64_t runtimeMs = uint64_t((MonotonicSeconds() - s_startSeconds) * 1000.0);
+        const unsigned locationIndex = s_testLocationIndex.load(std::memory_order_acquire) & 1;
+        CrashWriteRaw(fd, "[crash] run_id=");
+        CrashWriteDec(fd, s_runId.load(std::memory_order_acquire));
+        CrashWriteRaw(fd, " runtime_ms=");
+        CrashWriteDec(fd, runtimeMs);
+        CrashWriteRaw(fd, " approximate_time_to_crash_seconds=");
+        CrashWriteDec(fd, runtimeMs / 1000);
+        CrashWriteRaw(fd, " location=");
+        CrashWriteRaw(fd, s_testLocations[locationIndex]);
+        CrashWriteRaw(fd, "\n");
+
         CrashWriteRaw(fd, "[crash] FATAL SIGNAL ");
         CrashWriteDec(fd, uint64_t(signal));
         switch (signal)
@@ -461,6 +517,31 @@ static void LogDeviceInfo()
     }
 
     WriteLogRecord("[device]", nullptr, line, strlen(line));
+
+    const char* romProperties[][2] =
+    {
+        { "display", "ro.build.display.id" },
+        { "incremental", "ro.build.version.incremental" },
+        { "security_patch", "ro.build.version.security_patch" },
+        { "fingerprint", "ro.build.fingerprint" },
+        { "vendor_fingerprint", "ro.vendor.build.fingerprint" },
+    };
+
+    for (const auto& [label, property] : romProperties)
+    {
+        char value[PROP_VALUE_MAX]{};
+        __system_property_get(property, value);
+        snprintf(line, sizeof(line), "%s=%s", label, value[0] != '\0' ? value : "?");
+        WriteLogRecord("[rom]", nullptr, line, strlen(line));
+    }
+
+    struct utsname kernel{};
+    if (uname(&kernel) == 0)
+    {
+        snprintf(line, sizeof(line), "release=%s version=%s machine=%s",
+            kernel.release, kernel.version, kernel.machine);
+        WriteLogRecord("[kernel]", nullptr, line, strlen(line));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -486,11 +567,17 @@ void os::logger::Init()
     // Create log.txt promptly (and roll the previous one) so a tester always finds a
     // fresh file, even if this run happens to log nothing else before a freeze.
     WriteLogRecord("[logger]", nullptr, "Unleashed Recomp log started", 28);
-    static constexpr char BuildVersion[] = "=== APK VERSION: 0.5.2 (2026-07-13) ===";
-    static constexpr char BuildId[] = "ANDROID_BUILD_ID=0.5.2-release";
+    static constexpr char BuildVersion[] = "=== APK VERSION: 0.5.3 (2026-07-22) ===";
+    static constexpr char BuildId[] = "ANDROID_BUILD_ID=0.5.3-release";
     WriteLogRecord("[build]", nullptr, BuildVersion, sizeof(BuildVersion) - 1);
     WriteLogRecord("[build]", nullptr, BuildId, sizeof(BuildId) - 1);
     LogDeviceInfo();
+
+    char runLine[256];
+    snprintf(runLine, sizeof(runLine),
+        "run_id=%llu location=startup elapsed_origin=process_start counter_scope=app_data",
+        static_cast<unsigned long long>(s_runId.load(std::memory_order_acquire)));
+    WriteLogRecord("[run]", nullptr, runLine, strlen(runLine));
     InstallCrashHandler();
 }
 
@@ -533,6 +620,26 @@ void os::logger::SetWatchdogSuspended(bool suspended)
     }
 
     s_watchdogSuspended.store(suspended, std::memory_order_relaxed);
+}
+
+void os::logger::SetTestLocation(const std::string_view location)
+{
+    const std::string_view normalized = location.empty() ? std::string_view("unknown") : location;
+    const unsigned currentIndex = s_testLocationIndex.load(std::memory_order_acquire) & 1;
+    if (normalized == s_testLocations[currentIndex])
+        return;
+
+    const unsigned nextIndex = currentIndex ^ 1;
+    const size_t length = std::min(normalized.size(), sizeof(s_testLocations[nextIndex]) - 1);
+    memcpy(s_testLocations[nextIndex], normalized.data(), length);
+    s_testLocations[nextIndex][length] = '\0';
+    s_testLocationIndex.store(nextIndex, std::memory_order_release);
+
+    char line[256];
+    const int written = snprintf(line, sizeof(line), "run_id=%llu location=%s",
+        static_cast<unsigned long long>(s_runId.load(std::memory_order_acquire)),
+        s_testLocations[nextIndex]);
+    WriteLogRecord("[location]", nullptr, line, written > 0 ? size_t(written) : 0);
 }
 
 void os::logger::Heartbeat()

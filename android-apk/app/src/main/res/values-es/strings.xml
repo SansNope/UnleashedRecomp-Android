@@ -80,10 +80,16 @@
     <string name="error_install_no_mod">El origen seleccionado no contiene ningún mod.ini, así que no se encontró ningún mod.</string>
 
     <string-array name="driver_labels">
-        <item>Auto (recomendado)</item><item>Sistema</item><item>Turnip incluido</item><item>Adreno 710 (Vauzi)</item><item>A725 Performance (experimental; sysmem+nobin)</item><item>Importado</item>
+        <item>Auto (recomendado)</item><item>Sistema</item><item>Turnip incluido</item><item>Adreno 710 (Vauzi)</item><item>A725 Performance (experimental; sysmem+nobin)</item><item>Adreno 8xx Experimental (sysmem+flushall)</item><item>Importado</item>
     </string-array>
     <string-array name="render_mode_labels">
         <item>Auto (recomendado)</item><item>GMEM</item><item>Sysmem</item>
+    </string-array>
+    <string name="launcher_audio">Audio</string>
+    <string name="launcher_audio_preset">Preset de audio</string>
+    <string name="launcher_audio_preset_hint">Elige AYN si el juego no tiene sonido desde el inicio (AYN Odin 2 / Thor y consolas similares). El perfil POCO F8 Ultra activa una ruta AAudio experimental de baja latencia para ese dispositivo; en otros puede causar chasquidos o pérdida de sonido. Se aplica en el próximo inicio.</string>
+    <string-array name="audio_preset_labels">
+        <item>Predeterminado (recomendado)</item><item>AYN (consolas portátiles)</item><item>POCO F8 Ultra (baja latencia)</item>
     </string-array>
     <string-array name="touch_policy_labels">
         <item>Auto</item><item>Siempre activados</item><item>Desactivados</item>

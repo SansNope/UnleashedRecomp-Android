@@ -90,10 +90,16 @@
     <string name="error_install_no_mod">В выбранном источнике нет mod.ini — мод не найден.</string>
 
     <string-array name="driver_labels">
-        <item>Авто (рекомендуется)</item><item>Системный</item><item>Встроенный Turnip</item><item>Adreno 710 (Vauzi)</item><item>A725 Performance (эксперимент; sysmem+nobin)</item><item>Импортированный</item>
+        <item>Авто (рекомендуется)</item><item>Системный</item><item>Встроенный Turnip</item><item>Adreno 710 (Vauzi)</item><item>A725 Performance (эксперимент; sysmem+nobin)</item><item>Adreno 8xx Experimental (sysmem+flushall)</item><item>Импортированный</item>
     </string-array>
     <string-array name="render_mode_labels">
         <item>Авто (рекомендуется)</item><item>GMEM</item><item>Sysmem</item>
+    </string-array>
+    <string name="launcher_audio">Звук</string>
+    <string name="launcher_audio_preset">Пресет звука</string>
+    <string name="launcher_audio_preset_hint">Выберите AYN, если звука нет с самого запуска игры (AYN Odin 2 / Thor и похожие консоли). Профиль POCO F8 Ultra включает экспериментальный низколатентный путь AAudio для этого устройства; на других устройствах возможны треск или пропадание звука. Применяется при следующем запуске.</string>
+    <string-array name="audio_preset_labels">
+        <item>Стандартный (рекомендуется)</item><item>AYN (портативные консоли)</item><item>POCO F8 Ultra (низкая задержка)</item>
     </string-array>
     <string-array name="touch_policy_labels">
         <item>Авто</item><item>Всегда включены</item><item>Выключены</item>

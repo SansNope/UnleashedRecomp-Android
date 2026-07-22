@@ -336,6 +336,7 @@ CONFIG_DEFINE_ENUM_TEMPLATE(EAndroidVulkanDriver)
     { "Bundled",  EAndroidVulkanDriver::Bundled },
     { "Vauzi710", EAndroidVulkanDriver::Vauzi710 },
     { "ExperimentalA725", EAndroidVulkanDriver::ExperimentalA725 },
+    { "ExperimentalA8xx", EAndroidVulkanDriver::ExperimentalA8xx },
     { "Imported", EAndroidVulkanDriver::Imported }
 };
 
@@ -344,6 +345,13 @@ CONFIG_DEFINE_ENUM_TEMPLATE(EAndroidRenderMode)
     { "Auto",   EAndroidRenderMode::Auto },
     { "GMEM",   EAndroidRenderMode::GMEM },
     { "Sysmem", EAndroidRenderMode::Sysmem }
+};
+
+CONFIG_DEFINE_ENUM_TEMPLATE(EAndroidAudioPreset)
+{
+    { "Default",    EAndroidAudioPreset::Default },
+    { "AYN",        EAndroidAudioPreset::AYN },
+    { "LowLatency", EAndroidAudioPreset::LowLatency }
 };
 
 CONFIG_DEFINE_ENUM_TEMPLATE(EWindowState)

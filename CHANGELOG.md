@@ -1,8 +1,36 @@
 # Changelog
 
+## 0.5.3 (2026-07-22)
+
+### Android audio stability and device presets
+
+- Kept the reworked clocked-producer audio path that isolates the game audio clock from Android output stalls and preserves buffered audio across route changes.
+- Improved recovery when the app returns from the background or the active output changes, including Bluetooth and device-specific routed outputs.
+- Kept the **AYN** preset for consoles that start without sound and the opt-in **POCO F8 Ultra (low latency)** preset.
+- The POCO profile requests AAudio's exclusive low-latency path and uses a smaller FIFO cushion. Default and AYN profiles retain the more conservative shared path.
+
+### Vulkan driver profiles
+
+- Added **Adreno 8xx Experimental (sysmem+flushall)** as a separate, non-default launcher choice.
+- The new profile uses the bundled whitebelyash Mesa 26.2 gen8-capable driver and forces the exact `TU_DEBUG=sysmem,flushall` workaround for artifact-prone Adreno 8xx devices.
+- The profile locks Render Mode to Sysmem and ignores external `tu_debug.txt` overrides so the selected workaround is deterministic.
+- No duplicate driver binary is stored in the APK: the Adreno 8xx and A725 profiles share the same driver asset but apply different runtime presets.
+- **A725 Performance** remains available with its existing forced `TU_DEBUG=sysmem,nobin` preset. Auto, the universal bundled driver and the Adreno 710 Vauzi profile are unchanged.
+
+### Build metadata
+
+- Advanced the Android package to version code 17 / version name `0.5.3`.
+- Updated the persistent diagnostic log banner to identify the build as `0.5.3-release`.
+
 ## 0.5.2 (2026-07-13)
 
 Version 0.5.2 replaces the withdrawn 0.5.1 APK. It contains every user-facing change from 0.5.1, removes performance instrumentation that was unintentionally left enabled there, and adds the features below.
+
+### Android audio presets
+
+- Added an experimental **POCO F8 Ultra (low latency)** preset. It reduces the internal FIFO cushion from 16 to 8 guest audio frames (about 85 ms to 43 ms) and requests AAudio's exclusive low-latency path to avoid HyperOS selecting an approximately 80 ms shared hardware burst.
+- The existing **Default** and **AYN** behavior is unchanged. The POCO-specific path is opt-in because it may crackle, stall or lose sound on devices whose AAudio/MMAP implementation is unreliable.
+- The selected preset, resolved FIFO parameters, AAudio performance/sharing modes, hardware burst, active buffer and platform xrun count are written to the Android log.
 
 ### Mod settings (issue #75)
 

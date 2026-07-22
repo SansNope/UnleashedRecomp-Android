@@ -105,7 +105,8 @@ enum class EAndroidVulkanDriver : uint32_t
     Bundled,
     Imported,
     Vauzi710,
-    ExperimentalA725
+    ExperimentalA725,
+    ExperimentalA8xx
 };
 
 enum class EAndroidRenderMode : uint32_t
@@ -113,6 +114,13 @@ enum class EAndroidRenderMode : uint32_t
     Auto,
     GMEM,
     Sysmem
+};
+
+enum class EAndroidAudioPreset : uint32_t
+{
+    Default,
+    AYN,
+    LowLatency
 };
 
 enum class EWindowState : uint32_t

@@ -50,6 +50,9 @@ CONFIG_DEFINE_LOCALISED("Audio", float, EffectsVolume, 1.0f);
 CONFIG_DEFINE_ENUM_LOCALISED("Audio", EChannelConfiguration, ChannelConfiguration, EChannelConfiguration::Stereo);
 CONFIG_DEFINE_LOCALISED("Audio", bool, MusicAttenuation, false);
 CONFIG_DEFINE_LOCALISED("Audio", bool, BattleTheme, true);
+#ifdef __ANDROID__
+CONFIG_DEFINE_ENUM("Audio", EAndroidAudioPreset, AndroidAudioPreset, EAndroidAudioPreset::Default);
+#endif
 
 CONFIG_DEFINE("Video", std::string, GraphicsDevice, "");
 CONFIG_DEFINE_ENUM("Video", EGraphicsAPI, GraphicsAPI, EGraphicsAPI::Auto);

@@ -92,6 +92,22 @@ PPC_FUNC(sub_822C1130)
     App::s_deltaTime = ctx.f1.f64;
     App::s_time += App::s_deltaTime;
 
+#ifdef __ANDROID__
+    // Publish the actual internal stage name into log.txt. Empty names cover the
+    // title screen, menus, world map and transitions where no playable stage exists.
+    const char* testLocation = "front_end_or_loading";
+    if (auto pGameDocument = SWA::CGameDocument::GetInstance())
+    {
+        if (pGameDocument->m_pMember)
+        {
+            const char* stageName = pGameDocument->m_pMember->m_StageName.c_str();
+            if (stageName != nullptr && stageName[0] != '\0')
+                testLocation = stageName;
+        }
+    }
+    os::logger::SetTestLocation(testLocation);
+#endif
+
     // This function can also be called by the loading thread,
     // which SDL does not like. To prevent the OS from thinking
     // the process is unresponsive, we will flush while waiting
@@ -125,4 +141,3 @@ PPC_FUNC(sub_822C1130)
 
     __imp__sub_822C1130(ctx, base);
 }
-

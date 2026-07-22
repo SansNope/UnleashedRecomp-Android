@@ -1,6 +1,19 @@
 # Bundled Turnip driver
 
-The APK contains three selectable Turnip builds.
+The APK contains three Turnip binaries exposed through four selectable driver
+profiles. The two experimental profiles below intentionally share one binary
+and apply different forced `TU_DEBUG` presets.
+
+## Adreno 8xx Experimental
+
+This launcher profile reuses `vulkan.wb26_2_rp_pair_ccu_color_a725.so`, whose
+Mesa snapshot contains gen8 device definitions for Adreno 810, 825, 829, 830,
+840, X2-85, and X2-90. It forces `TU_DEBUG=sysmem,flushall` to trade the cost of
+full cache flushing for artifact reduction on powerful Adreno 8xx devices.
+
+The profile is never selected by Auto. The Render Mode control is locked to
+Sysmem while it is selected, and external `driver_import/tu_debug.txt` values
+cannot override its required preset.
 
 ## A725 Performance (experimental)
 

@@ -69,4 +69,8 @@ namespace os::logger
     // Pauses the Android hang watchdog while the game is intentionally frozen in the
     // background, so the missing frames are not reported as a hang; a no-op elsewhere.
     void SetWatchdogSuspended(bool suspended);
+
+    // Records the current stage/front-end location and keeps a signal-safe copy for
+    // the Android crash report. Other platforms implement this as a no-op.
+    void SetTestLocation(const std::string_view location);
 }

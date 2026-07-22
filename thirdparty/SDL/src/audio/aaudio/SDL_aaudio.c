@@ -23,6 +23,7 @@
 #ifdef SDL_AUDIO_DRIVER_AAUDIO
 
 #include "SDL_audio.h"
+#include "SDL_hints.h"
 #include "SDL_loadso.h"
 #include "../SDL_audio_c.h"
 #include "../../core/android/SDL_android.h"
@@ -69,6 +70,26 @@ void aaudio_errorCallback(AAudioStream *stream, void *userData, aaudio_result_t 
 }
 
 #define LIB_AAUDIO_SO "libaaudio.so"
+#define UNLEASHED_AAUDIO_LOW_LATENCY_HINT "UNLEASHED_AAUDIO_LOW_LATENCY"
+
+static SDL_bool UseUnleashedLowLatencyProfile(void)
+{
+    return SDL_GetHintBoolean(UNLEASHED_AAUDIO_LOW_LATENCY_HINT, SDL_FALSE);
+}
+
+static aaudio_performance_mode_t RequestedPerformanceMode(void)
+{
+    return UseUnleashedLowLatencyProfile()
+        ? AAUDIO_PERFORMANCE_MODE_LOW_LATENCY
+        : AAUDIO_PERFORMANCE_MODE_NONE;
+}
+
+static aaudio_sharing_mode_t RequestedSharingMode(void)
+{
+    return UseUnleashedLowLatencyProfile()
+        ? AAUDIO_SHARING_MODE_EXCLUSIVE
+        : AAUDIO_SHARING_MODE_SHARED;
+}
 
 static void ConfigureOutputBuffer(AAudioStream *stream, int appChunkFrames, const char *reason)
 {
@@ -86,10 +107,13 @@ static void ConfigureOutputBuffer(AAudioStream *stream, int appChunkFrames, cons
     }
 
     setResult = ctx.AAudioStream_setBufferSizeInFrames(stream, target);
-    SDL_Log("AAudio buffer (%s): burst %d, chunk %d, requested %d, accepted %d, active %d, capacity %d",
-            reason, burst, appChunkFrames, target, (int)setResult,
+    SDL_Log("AAudio buffer (%s): performance requested/actual %d/%d, sharing requested/actual %d/%d, burst %d, chunk %d, requested %d, accepted %d, active %d, capacity %d, xruns %d",
+            reason, (int)RequestedPerformanceMode(), (int)ctx.AAudioStream_getPerformanceMode(stream),
+            (int)RequestedSharingMode(), (int)ctx.AAudioStream_getSharingMode(stream),
+            burst, appChunkFrames, target, (int)setResult,
             ctx.AAudioStream_getBufferSizeInFrames(stream),
-            ctx.AAudioStream_getBufferCapacityInFrames(stream));
+            ctx.AAudioStream_getBufferCapacityInFrames(stream),
+            ctx.AAudioStream_getXRunCount(stream));
 }
 
 static int aaudio_OpenDevice(_THIS, const char *devname)
@@ -143,9 +167,10 @@ static int aaudio_OpenDevice(_THIS, const char *devname)
     }
 
     ctx.AAudioStreamBuilder_setErrorCallback(ctx.builder, aaudio_errorCallback, private);
-    /* UnleashedRecomp: LOW_LATENCY selects MMAP paths that stall with our workload on some
-       devices (observed on SD 8 Gen 3); game audio does not need instrument-grade latency. */
-    ctx.AAudioStreamBuilder_setPerformanceMode(ctx.builder, AAUDIO_PERFORMANCE_MODE_NONE);
+    /* LOW_LATENCY remains opt-in because it can select MMAP paths that stalled on some
+       Snapdragon devices. The POCO F8 Ultra profile enables it explicitly. */
+    ctx.AAudioStreamBuilder_setSharingMode(ctx.builder, RequestedSharingMode());
+    ctx.AAudioStreamBuilder_setPerformanceMode(ctx.builder, RequestedPerformanceMode());
 
     LOGI("AAudio Try to open %u hz %u bit chan %u %s samples %u",
          this->spec.freq, SDL_AUDIO_BITSIZE(this->spec.format),
@@ -273,8 +298,9 @@ static int RebuildAAudioStream(SDL_AudioDevice *device)
     }
 
     ctx.AAudioStreamBuilder_setErrorCallback(ctx.builder, aaudio_errorCallback, hidden);
-    /* UnleashedRecomp: see the matching change in the open path above. */
-    ctx.AAudioStreamBuilder_setPerformanceMode(ctx.builder, AAUDIO_PERFORMANCE_MODE_NONE);
+    /* UnleashedRecomp: see the matching profile selection in the open path above. */
+    ctx.AAudioStreamBuilder_setSharingMode(ctx.builder, RequestedSharingMode());
+    ctx.AAudioStreamBuilder_setPerformanceMode(ctx.builder, RequestedPerformanceMode());
 
     LOGI("AAudio Try to reopen %u hz %u bit chan %u %s samples %u",
          device->spec.freq, SDL_AUDIO_BITSIZE(device->spec.format),
@@ -350,17 +376,15 @@ static void aaudio_PlayDevice(_THIS)
         LOGI("SDL AAudio play: %d frames, wanted:%d frames", (int)res, private->mixlen / private->frame_size);
     }
 
-#if 0
-    /* Log under-run count */
-    {
+    /* Log platform xruns for the experimental low-latency profile. */
+    if (UseUnleashedLowLatencyProfile()) {
         static int prev = 0;
         int32_t cnt = ctx.AAudioStream_getXRunCount(private->stream);
         if (cnt != prev) {
-            SDL_Log("AAudio underrun: %d - total: %d", cnt - prev, cnt);
+            SDL_Log("AAudio xrun: +%d, total %d", cnt - prev, cnt);
             prev = cnt;
         }
     }
-#endif
 }
 
 static int aaudio_CaptureFromDevice(_THIS, void *buffer, int buflen)
