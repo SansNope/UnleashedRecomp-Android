@@ -5,10 +5,12 @@ import android.content.ClipData;
 import android.content.Intent;
 import android.graphics.Typeface;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.LinearLayout;
@@ -96,6 +98,12 @@ public final class ModManagerActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (Build.VERSION.SDK_INT >= 28 /* Android 9 (P) */) {
+            WindowManager.LayoutParams params = getWindow().getAttributes();
+            params.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+            getWindow().setAttributes(params);
+        }
+        hideSystemBars();
 
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -177,7 +185,7 @@ public final class ModManagerActivity extends Activity {
             }
         }
 
-        File userDirectory = new File(activeGameRoot, ".config/UnleashedRecomp");
+        File userDirectory = new File(AppStorage.configRoot(this), ".config/UnleashedRecomp");
         File managerDatabase = new File(userDirectory, MOD_DATABASE_NAME);
         File sourceDatabase = findSourceDatabase(userDirectory, managerDatabase);
         Map<String, Map<String, String>> sourceIni = readIni(sourceDatabase);
@@ -465,8 +473,7 @@ public final class ModManagerActivity extends Activity {
     }
 
     private void saveSelection() {
-        File activeGameRoot = getActiveGameRoot();
-        File userDirectory = new File(activeGameRoot, ".config/UnleashedRecomp");
+        File userDirectory = new File(AppStorage.configRoot(this), ".config/UnleashedRecomp");
         if (!userDirectory.isDirectory() && !userDirectory.mkdirs()) {
             showError(getString(R.string.mod_manager_error_directory, userDirectory));
             return;
@@ -696,5 +703,22 @@ public final class ModManagerActivity extends Activity {
 
     private LinearLayout.LayoutParams squareButton() {
         return new LinearLayout.LayoutParams(dp(52), LinearLayout.LayoutParams.WRAP_CONTENT);
+    }
+
+    /** See LauncherActivity.hideSystemBars(). */
+    private void hideSystemBars() {
+        int flags = View.SYSTEM_UI_FLAG_FULLSCREEN |
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+        getWindow().getDecorView().setSystemUiVisibility(flags);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideSystemBars();
     }
 }

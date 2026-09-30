@@ -23,9 +23,10 @@ std::filesystem::path BuildUserPath()
     CoTaskMemFree(knownPath);
 #elif defined(__ANDROID__)
     // No meaningful $HOME/passwd entry for an app UID; getpwuid()->pw_dir returns a
-    // generic path apps can't write to. Keep config/saves next to the game files
-    // (legacy internal install or external app storage, whichever GetDataRoot picked).
-    userPath = os::android::GetDataRoot() / ".config" / USER_DIRECTORY;
+    // generic path apps can't write to. See GetConfigRoot() for where config/saves
+    // actually land (next to the game files for an existing install, Android/media
+    // for a fresh one so raw-path tools like Syncthing can reach saves).
+    userPath = os::android::GetConfigRoot() / ".config" / USER_DIRECTORY;
 #elif defined(__linux__) || defined(__APPLE__)
     const char* homeDir = getenv("HOME");
 #if defined(__linux__)

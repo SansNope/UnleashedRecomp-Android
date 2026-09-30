@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">UnleashedRecomp</string>
+    <string name="app_name">Unleashed Recompiled</string>
     <string name="documents_game_title">Файлы игры Unleashed Recomp</string>
     <string name="documents_game_summary">Активная игра, моды, конфигурация и сохранения</string>
     <string name="documents_transfer_title">Передача файлов Unleashed Recomp</string>
@@ -50,6 +50,18 @@
     <string name="launcher_gfx_capture">Записывать трассу GFXReconstruct (очень большой файл, медленно)</string>
     <string name="launcher_open_logs">Открыть логи и трассы</string>
     <string name="launcher_play">Запустить игру</string>
+    <string name="launcher_settings">Настройки</string>
+    <string name="launcher_back_to_home">← Домой</string>
+    <string name="launcher_home_not_ready">Установите файлы игры в Настройках, чтобы начать играть.</string>
+    <string name="launcher_home_staged">Пакеты игры подготовлены и установятся при следующем запуске.</string>
+    <string name="launcher_exit">Выход</string>
+    <string name="launcher_appearance">Внешний вид</string>
+    <string name="launcher_appearance_summary">Замените фон и логотип главного экрана своими изображениями.</string>
+    <string name="launcher_choose_background">Выбрать фон</string>
+    <string name="launcher_reset_background">Сбросить фон</string>
+    <string name="launcher_choose_logo">Выбрать логотип</string>
+    <string name="launcher_reset_logo">Сбросить логотип</string>
+    <string name="error_image_import">Не удалось использовать это изображение: %1$s</string>
     <string name="launcher_driver_pending">Пакетов драйвера для установки при следующем запуске: %1$d.</string>
     <string name="launcher_driver_installed">Доступен импортированный драйвер: %1$s</string>
     <string name="launcher_driver_builtin">Доступны системный и встроенные драйверы Turnip. Импортированный драйвер не найден.</string>

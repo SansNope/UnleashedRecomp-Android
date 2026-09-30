@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">UnleashedRecomp</string>
+    <string name="app_name">Unleashed Recompiled</string>
     <string name="documents_game_title">Unleashed Recomp game files</string>
     <string name="documents_game_summary">Active game, mods, configuration and saves</string>
     <string name="documents_transfer_title">Unleashed Recomp transfers</string>
@@ -49,6 +49,18 @@
     <string name="launcher_gfx_capture">Record GFXReconstruct trace (very large and slow)</string>
     <string name="launcher_open_logs">Open logs and captures</string>
     <string name="launcher_play">Launch game</string>
+    <string name="launcher_settings">Settings</string>
+    <string name="launcher_back_to_home">← Home</string>
+    <string name="launcher_home_not_ready">Install the game files in Settings to start playing.</string>
+    <string name="launcher_home_staged">Game packages are staged and will install on next launch.</string>
+    <string name="launcher_exit">Exit</string>
+    <string name="launcher_appearance">Appearance</string>
+    <string name="launcher_appearance_summary">Replace the home screen background and logo with your own images.</string>
+    <string name="launcher_choose_background">Choose background</string>
+    <string name="launcher_reset_background">Reset background</string>
+    <string name="launcher_choose_logo">Choose logo</string>
+    <string name="launcher_reset_logo">Reset logo</string>
+    <string name="error_image_import">Could not use this image: %1$s</string>
     <string name="launcher_driver_pending">%1$d driver package(s) will be installed on the next launch.</string>
     <string name="launcher_driver_installed">Imported driver available: %1$s</string>
     <string name="launcher_driver_builtin">Bundled Turnip drivers and the system driver are available. No imported driver found.</string>

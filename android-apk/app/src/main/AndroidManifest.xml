@@ -65,12 +65,15 @@
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="true"
         android:theme="@style/AppTheme"
-        android:hardwareAccelerated="true" >
+        android:hardwareAccelerated="true"
+        android:isGame="true"
+        android:appCategory="game" >
 
         <activity
             android:name=".LauncherActivity"
             android:label="@string/app_name"
             android:exported="true"
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/LauncherTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -117,12 +120,14 @@
             android:name=".ModManagerActivity"
             android:label="@string/mod_manager_launcher_name"
             android:exported="false"
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/ModManagerTheme" />
 
         <activity
             android:name=".ModSettingsActivity"
             android:label="@string/mod_settings_title"
             android:exported="false"
+            android:screenOrientation="sensorLandscape"
             android:theme="@style/ModManagerTheme" />
 
         <!-- Expose app-owned game files through Android's Storage Access Framework.
