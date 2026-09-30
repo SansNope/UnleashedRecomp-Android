@@ -155,4 +155,33 @@ namespace os::android
 
         return root;
     }
+
+    const std::filesystem::path & GetConfigRoot()
+    {
+        static std::filesystem::path root = []() -> std::filesystem::path
+        {
+            std::error_code ec;
+
+            // Existing install: ".config" is already populated next to the game files
+            // (legacy internal layout, external app storage, or a media install that
+            // predates this function). Keep using it so upgrading never relocates saves.
+            if (std::filesystem::exists(GetDataRoot() / ".config" / USER_DIRECTORY, ec))
+                return GetDataRoot();
+
+            // Fresh install: prefer Android/media so ".config" (and the save data inside
+            // it) sits at a real filesystem path other apps can read without root or SAF.
+            const std::filesystem::path &media = GetExternalMediaDir();
+            if (!media.empty())
+            {
+                std::filesystem::path mediaRoot = media / "UnleashedRecomp";
+                std::filesystem::create_directories(mediaRoot, ec);
+                if (ProbeDirWritable(mediaRoot))
+                    return mediaRoot;
+            }
+
+            return GetDataRoot();
+        }();
+
+        return root;
+    }
 }

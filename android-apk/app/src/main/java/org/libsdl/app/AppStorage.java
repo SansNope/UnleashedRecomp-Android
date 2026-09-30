@@ -42,13 +42,37 @@ final class AppStorage {
         return external != null ? external : internal;
     }
 
-    static File configFile(Context context) {
-        return new File(activeGameRoot(context), ".config/UnleashedRecomp/config.toml");
+    /**
+     * Mirrors the native GetConfigRoot(): an existing install keeps ".config" next to
+     * the game files it already has, so upgrading never relocates saves. A fresh
+     * install prefers Android/media, since unlike Android/data it isn't hidden from
+     * other apps by scoped storage on Android 11+ - so a raw-path tool such as
+     * Syncthing can be pointed at the save folder directly, without SAF or root.
+     */
+    static File configRoot(Context context) {
+        File dataRoot = activeGameRoot(context);
+        if (new File(dataRoot, ".config/UnleashedRecomp").isDirectory()) {
+            return dataRoot;
+        }
+
+        File media = mediaBase(context);
+        if (media != null) {
+            File mediaRoot = new File(media, "UnleashedRecomp");
+            if (mediaRoot.isDirectory() || mediaRoot.mkdirs()) {
+                return mediaRoot;
+            }
+        }
+
+        return dataRoot;
     }
 
-    /** Where native paths.cpp keeps save data: <game root>/.config/UnleashedRecomp/save. */
+    static File configFile(Context context) {
+        return new File(configRoot(context), ".config/UnleashedRecomp/config.toml");
+    }
+
+    /** Where native paths.cpp keeps save data: <config root>/.config/UnleashedRecomp/save. */
     static File saveDir(Context context) {
-        return new File(activeGameRoot(context), ".config/UnleashedRecomp/save");
+        return new File(configRoot(context), ".config/UnleashedRecomp/save");
     }
 
     static File transferRoot(Context context) {

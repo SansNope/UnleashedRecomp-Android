@@ -24,4 +24,11 @@ namespace os::android
     // storage, then a populated one under Android/media; defaults to external app
     // storage, which users can populate from a PC without root.
     const std::filesystem::path & GetDataRoot();
+
+    // Root directory for ".config" (settings, saves). An existing install keeps using
+    // ".config" next to GetDataRoot() so upgrading never relocates a user's save data.
+    // A fresh install prefers Android/media instead: unlike Android/data, it is not
+    // hidden from other apps by scoped storage on Android 11+, so tools that need a
+    // real filesystem path (e.g. Syncthing) can reach saves there without root or SAF.
+    const std::filesystem::path & GetConfigRoot();
 }

@@ -177,7 +177,7 @@ public final class ModManagerActivity extends Activity {
             }
         }
 
-        File userDirectory = new File(activeGameRoot, ".config/UnleashedRecomp");
+        File userDirectory = new File(AppStorage.configRoot(this), ".config/UnleashedRecomp");
         File managerDatabase = new File(userDirectory, MOD_DATABASE_NAME);
         File sourceDatabase = findSourceDatabase(userDirectory, managerDatabase);
         Map<String, Map<String, String>> sourceIni = readIni(sourceDatabase);
@@ -465,8 +465,7 @@ public final class ModManagerActivity extends Activity {
     }
 
     private void saveSelection() {
-        File activeGameRoot = getActiveGameRoot();
-        File userDirectory = new File(activeGameRoot, ".config/UnleashedRecomp");
+        File userDirectory = new File(AppStorage.configRoot(this), ".config/UnleashedRecomp");
         if (!userDirectory.isDirectory() && !userDirectory.mkdirs()) {
             showError(getString(R.string.mod_manager_error_directory, userDirectory));
             return;
