@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Mali
+
+- GPUs whose Vulkan driver lacks descriptor indexing (stock Mali Bifrost drivers such as Mali-G52 and G76) now get an explanation and a pointer to experimental PanVK driver packages, instead of failing every pipeline and crashing in `libGLES_mali.so` (issue #147).
+- Driver packages whose `meta.json` declares a `minApi` above the device's Android API level are no longer extracted. They are moved to `driver_import/rejected/`, and the launcher's **Graphics** section says why.
+- Documented the community PanVK builds that run on the stock Mali kernel driver (panvk-kbase-android for Valhall, mali-panvk for Bifrost) in the README and `docs/GRAPHICS_DRIVERS.md`.
+
 ## 0.6.1 (2026-10-10)
 
 ### Graphics

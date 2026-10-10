@@ -66,6 +66,7 @@
     <string name="launcher_driver_installed">Доступен импортированный драйвер: %1$s</string>
     <string name="launcher_driver_builtin">Доступны системный и встроенные драйверы Turnip. Импортированный драйвер не найден.</string>
     <string name="launcher_driver_recovery">Предыдущий запуск Vulkan не завершился. Автовосстановление выберет безопасный драйвер; если ошибка повторится, выберите здесь «Системный».</string>
+    <string name="launcher_driver_rejected">%1$s не установлен: нужен Android с API %2$s или новее, а на устройстве API %3$d. Пакет перенесён в driver_import/rejected.</string>
     <string name="launcher_log_found">Найден последний лог (%1$s).</string>
     <string name="launcher_log_missing">Лога пока нет. Он появится после запуска игры.</string>
     <string name="game_ready_all_dlc">Можно запускать. Найдены основная игра, обновление и все DLC.</string>
@@ -190,6 +191,7 @@
     <string name="installer_unknown_dlc">Не удалось определить тип DLC. Выберите поддерживаемый пакет DLC Sonic Unleashed для Xbox 360.</string>
     <string name="installer_failed">Не удалось установить выбранные пакеты. Проверьте исходные файлы, доступ к хранилищу и свободное место. Подробности в журнале.</string>
     <string name="vulkan_device_lost">Графический драйвер перестал отвечать (Vulkan device lost). Выберите другой драйвер Vulkan в лаунчере и запустите игру снова.</string>
+    <string name="vulkan_unsupported_gpu">Ваш GPU (%1$s) не поддерживает descriptor indexing в Vulkan, а он нужен игре. Старые GPU Mali, например Mali-G52 и G76, не могут запустить игру с системным драйвером. Можно попробовать экспериментальный драйвер PanVK: в лаунчере откройте «Графика» и нажмите «Импорт .so / .zip».</string>
     <string name="installer_game_missing">Файлы игры не найдены. Скопируйте папки game, update и необязательную dlc в:\n%1$s\n\nМожно также импортировать ISO, обновление или DLC через лаунчер. После копирования перезапустите приложение.</string>
     <string name="error_file_empty">Выбранный файл пуст.</string>
     <string name="error_schema_size">Файл схемы мода отсутствует, пуст или слишком большой.</string>

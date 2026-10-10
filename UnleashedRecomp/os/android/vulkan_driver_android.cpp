@@ -11,6 +11,8 @@
 #include <SDL.h>
 #include <SDL_system.h>
 
+#include <android/api-level.h>
+
 #include <cctype>
 #include <cstdint>
 #include <cerrno>
@@ -54,6 +56,9 @@ static constexpr const char *ADRENO_8XX_DRIVER_ASSET = "bundled_driver/vulkan.me
 static constexpr const char *ADRENO_8XX_TU_DEBUG_PRESET = "sysmem,nobin";
 static constexpr const char *DEFAULT_DRIVER_NAME = "vulkan.unleashed26_1_wfm_a732.so";
 static constexpr const char *LAST_IMPORTED_DRIVER_FILE = "last_imported_driver.txt";
+// Written when a package is rejected for needing a newer Android (meta.json minApi); the
+// launcher shows it until the next successful import. Line 1: file name, line 2: minApi.
+static constexpr const char *REJECTED_DRIVER_FILE = "rejected_driver.txt";
 static constexpr const char *VULKAN_STARTUP_STATE_FILE = "vulkan_startup_state.txt";
 
 enum class VulkanStartupPhase
@@ -572,9 +577,13 @@ static bool IsSafeDriverFileName(const std::string &driverName);
 // Samsung Xclipse and AdrenoToolsDrivers releases use. Every regular file is extracted
 // flat (basename only, so hostile entry paths cannot escape) into the turnip dir; the
 // adrenotools linker namespace resolves the package's dependent libraries from there.
-// Zips without meta.json fall back to selecting the single .so inside.
-static bool ImportDriverPackage(const std::filesystem::path &zipPath, const std::filesystem::path &turnipDir, std::string &selectedName)
+// Zips without meta.json fall back to selecting the single .so inside. A meta.json minApi
+// above this device's API level rejects the package (requiredApi > 0) before extraction:
+// such builds link against newer bionic symbols and would only fail at load time.
+static bool ImportDriverPackage(const std::filesystem::path &zipPath, const std::filesystem::path &turnipDir, std::string &selectedName,
+    int &requiredApi)
 {
+    requiredApi = 0;
     mz_zip_archive zip{};
     if (!mz_zip_reader_init_file(&zip, zipPath.string().c_str(), 0))
     {
@@ -625,12 +634,26 @@ static bool ImportDriverPackage(const std::filesystem::path &zipPath, const std:
             const auto parsed = nlohmann::json::parse(
                 static_cast<const char *>(meta), static_cast<const char *>(meta) + metaSize, nullptr, false);
             if (!parsed.is_discarded())
+            {
                 libraryName = parsed.value("libraryName", "");
+                const auto minApi = parsed.find("minApi");
+                if (minApi != parsed.end() && minApi->is_number_integer())
+                    requiredApi = minApi->get<int>();
+            }
 
             mz_free(meta);
         }
         break;
     }
+
+    if (requiredApi > android_get_device_api_level())
+    {
+        LOGF_ERROR("Driver import: {} requires Android API {} or newer; this device runs API {}.",
+            zipPath.filename().string(), requiredApi, android_get_device_api_level());
+        mz_zip_reader_end(&zip);
+        return false;
+    }
+    requiredApi = 0;
 
     if (libraryName.empty() && soCount == 1)
         libraryName = onlySoName;
@@ -705,8 +728,21 @@ static void ScanDriverImportDir(const std::filesystem::path &importDir, const st
         }
         else if (extension == ".zip")
         {
-            if (!ImportDriverPackage(entry.path(), turnipDir, selectedName))
+            int requiredApi = 0;
+            if (!ImportDriverPackage(entry.path(), turnipDir, selectedName, requiredApi))
+            {
+                // Retrying every launch cannot help a package built for a newer Android:
+                // park it and tell the launcher why it was not installed.
+                if (requiredApi > 0)
+                {
+                    const std::string rejected = fileName + "\n" + std::to_string(requiredApi);
+                    WriteTextFile(turnipDir / REJECTED_DRIVER_FILE, rejected.c_str());
+                    std::filesystem::path rejectedDir = importDir / "rejected";
+                    std::filesystem::create_directories(rejectedDir, ec);
+                    std::filesystem::rename(entry.path(), rejectedDir / fileName, ec);
+                }
                 continue;
+            }
         }
         else
         {
@@ -715,6 +751,7 @@ static void ScanDriverImportDir(const std::filesystem::path &importDir, const st
 
         WriteTextFile(turnipDir / "driver_name.txt", selectedName.c_str());
         WriteTextFile(turnipDir / LAST_IMPORTED_DRIVER_FILE, selectedName.c_str());
+        std::filesystem::remove(turnipDir / REJECTED_DRIVER_FILE, ec);
         std::filesystem::path installedDir = importDir / "installed";
         std::filesystem::create_directories(installedDir, ec);
         std::filesystem::rename(entry.path(), installedDir / fileName, ec);

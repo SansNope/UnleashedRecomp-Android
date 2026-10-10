@@ -1,6 +1,6 @@
 # Android graphics-driver findings
 
-Research date: 2026-07-11.
+Research date: 2026-07-11; Mali section updated 2026-10-10.
 
 ## Adreno 710 / Vauzi-17
 
@@ -41,29 +41,56 @@ Until then, the stock system Vulkan driver is the safe Auto choice on Xclipse.
 ZIP import remains available for experiments, but should not be described as
 full ExynosTools layer support.
 
-## Mesa PanVK on Android
+## Mali: stock drivers and PanVK
 
-Mesa can now compile PanVK with Android WSI/AHardwareBuffer support, and current
-PanVK exposes Vulkan 1.4 on supported Mali generations. That is only the
-userspace half of the stack. PanVK communicates with the upstream Linux
-`panfrost` or `panthor` DRM kernel uAPI; normal Android phones ship an Arm/vendor
-kernel driver instead. Unlike Turnip's Android KGSL path, PanVK cannot use that
-proprietary kernel interface through libadrenotools.
+### What the renderer needs
 
-Consequences:
+Every recompiled shader indexes one large texture and sampler heap through runtime
+descriptor arrays and loads constants through buffer device addresses. A driver
+therefore needs Vulkan 1.2-level `descriptorIndexing` (runtime arrays, partially
+bound and variable-count bindings, update-after-bind limits in the thousands),
+`bufferDeviceAddress` and `scalarBlockLayout`. BC texture support is optional: without
+it, textures are transcoded to ETC2/EAC on the CPU at load time.
 
-- building an Android ARM64 `libvulkan_panvk.so` is feasible;
-- loading it on an ordinary stock Mali phone is not expected to enumerate a GPU;
-- it becomes useful only on a device/ROM kernel exposing the matching panfrost
-  or panthor DRM render node, with Android buffer-sharing support wired up;
-- the game's system-driver path is currently more practical for recent Mali
-  devices whose vendor driver provides the required Vulkan features.
+### Stock Arm drivers
 
-For a development build, Mesa's relevant shape is `platforms=android`,
-`vulkan-drivers=panfrost`, and an Android ARM64 cross file. Producing and
-shipping that binary in the APK is intentionally deferred until a compatible
-Android kernel target exists; otherwise it adds size without helping stock
-devices.
+- **Valhall and newer** (G57, G68, G77, G610/G615, G710/G715, G720 and later) expose
+  these features and run the game with the system driver. Reports show low-end parts
+  such as G57 MC2 and G68 MP4/MP5 as playable at reduced settings, with some
+  Mali-specific rendering glitches (collectibles drawn through walls, a missing
+  character in one cutscene) that still need GPU captures to diagnose.
+- **Bifrost** (G52, G71, G72, G76) stock drivers report no descriptor indexing. The
+  descriptor limits fall back to 256 textures and 128 samplers, every graphics pipeline
+  fails with `VK_ERROR_INITIALIZATION_FAILED`, and the driver crashes in
+  `libGLES_mali.so` shortly after (issue #147). The game now detects the missing feature
+  after device creation and shows an explanation instead. Supporting these drivers would
+  need a renderer without the bindless heap, which is not planned.
+
+### PanVK on the stock kernel driver
+
+Upstream PanVK talks to the `panfrost`/`panthor` DRM kernel drivers, which retail
+Android phones do not ship. Since mid-2026, community projects run PanVK directly on
+Arm's `mali_kbase` interface (`/dev/mali0`), without root or a custom kernel:
+
+- [zenithblue-oss/panvk-kbase-android](https://github.com/zenithblue-oss/panvk-kbase-android)
+  for Valhall CSF GPUs (G610, G615, G710, G715, G720, G925; G57 experimental). It
+  reports Vulkan 1.4 with descriptor indexing and buffer device address, and exposes BC
+  textures through GPU decoding, so the game would skip the CPU ETC2 transcode. The
+  0.1.0 RC packages declare `minApi` 35 (Android 15).
+- [JimVulkan/mali-panvk](https://github.com/JimVulkan/mali-panvk) for Bifrost, tested on
+  Mali-G52 MC2 (Helio P65) and G76 (Exynos 9820). It reports Vulkan 1.3 without BC
+  formats. Whether its descriptor limits suffice for the game is unverified; it is the
+  only known route for Bifrost.
+- Smaller per-device builds exist, e.g. [LukeValen/panvk-mali-g52](https://github.com/LukeValen/panvk-mali-g52)
+  (Redmi 13C, alpha).
+
+Both main projects ship standard AdrenoTools zips (`meta.json` with `libraryName`), which
+the in-app importer accepts: import the zip in the launcher's **Graphics** section and
+start the game. A package whose `meta.json` `minApi` exceeds the device's API level is
+moved to `driver_import/rejected/` and reported in the launcher instead of failing at
+load time. All of these drivers are experimental and non-conformant; their authors
+warn about GPU faults and hangs, and vendor kernels (MediaTek, Exynos, Tensor) differ.
+None is bundled in the APK until real-device results with this game exist.
 
 ## Sysmem on Adreno 6xx
 

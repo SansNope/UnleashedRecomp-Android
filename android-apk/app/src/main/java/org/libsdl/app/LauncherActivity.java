@@ -487,9 +487,15 @@ public final class LauncherActivity extends Activity {
             pending += countDriverPackages(importDir);
         }
         String imported = readFirstLine(installedMarker);
+        // Written by the native importer for a package whose meta.json needs a newer Android.
+        List<String> rejected = readLines(new File(getFilesDir(), "turnip/rejected_driver.txt"));
         if (recoveryMarker.isFile()) {
             driverStatus.setText(R.string.launcher_driver_recovery);
             driverStatus.setTextColor(COLOR_DANGER);
+        } else if (rejected.size() >= 2) {
+            driverStatus.setText(getString(R.string.launcher_driver_rejected, rejected.get(0), rejected.get(1),
+                android.os.Build.VERSION.SDK_INT));
+            driverStatus.setTextColor(COLOR_WARNING);
         } else if (pending > 0) {
             driverStatus.setText(getString(R.string.launcher_driver_pending, pending));
             driverStatus.setTextColor(COLOR_TEXT_SECONDARY);
@@ -1652,6 +1658,17 @@ public final class LauncherActivity extends Activity {
             String line = reader.readLine();
             return line == null ? "" : line.trim();
         } catch (IOException ignored) { return ""; }
+    }
+
+    private static List<String> readLines(File file) {
+        List<String> lines = new ArrayList<>();
+        if (!file.isFile()) return lines;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+            new FileInputStream(file), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) lines.add(line.trim());
+        } catch (IOException ignored) { }
+        return lines;
     }
 
     private static File findFile(File root, String name, int depth) {

@@ -59,6 +59,7 @@
     <string name="launcher_driver_installed">Driver importato disponibile: %1$s</string>
     <string name="launcher_driver_builtin">Sono disponibili i driver Turnip inclusi e il driver di sistema. Nessun driver importato trovato.</string>
     <string name="launcher_driver_recovery">L\'ultimo avvio di Vulkan non è stato completato. Il ripristino automatico userà un driver più sicuro; scegli Sistema qui se il problema si ripete.</string>
+    <string name="launcher_driver_rejected">%1$s non è stato installato: richiede Android con livello API %2$s o successivo, mentre questo dispositivo ha livello API %3$d. Il pacchetto è stato spostato in driver_import/rejected.</string>
     <string name="launcher_log_found">Ultimo log trovato (%1$s).</string>
     <string name="launcher_log_missing">Nessun log ancora. Un log viene creato all\'avvio del gioco.</string>
     <string name="game_ready_all_dlc">Pronto all\'avvio. Rilevati gioco base, aggiornamento e tutti i DLC.</string>
@@ -188,6 +189,7 @@
     <string name="installer_unknown_dlc">Impossibile identificare il tipo di DLC. Scegli un pacchetto DLC supportato di Sonic Unleashed per Xbox 360.</string>
     <string name="installer_failed">Impossibile installare i pacchetti scelti. Controlla i file di origine, l’accesso allo spazio di archiviazione e lo spazio libero. I dettagli sono nel registro.</string>
     <string name="vulkan_device_lost">Il driver della GPU ha smesso di rispondere (Vulkan device lost). Scegli un altro driver Vulkan nel launcher e avvia di nuovo il gioco.</string>
+    <string name="vulkan_unsupported_gpu">La tua GPU (%1$s) non supporta il descriptor indexing di Vulkan, richiesto dal gioco. Le GPU Mali meno recenti, come Mali-G52 e G76, non possono eseguire il gioco con il driver di sistema. Puoi provare un pacchetto sperimentale del driver PanVK: nel launcher apri Grafica e tocca Importa.</string>
     <string name="installer_game_missing">File del gioco non trovati. Copia le cartelle game, update e, facoltativamente, dlc in:\n%1$s\n\nPuoi anche importare ISO, aggiornamenti o DLC nel launcher. Riavvia l’app dopo la copia.</string>
     <string name="error_file_empty">Il file selezionato è vuoto.</string>
     <string name="error_schema_size">Il file dello schema del mod è assente, vuoto o troppo grande.</string>

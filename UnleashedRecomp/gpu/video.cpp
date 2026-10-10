@@ -1979,6 +1979,22 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
     }
 
 #if defined(__ANDROID__)
+    // The recompiled shaders index one large texture/sampler heap through runtime descriptor
+    // arrays. Without descriptor indexing (stock Mali Bifrost drivers such as Mali-G52/G76)
+    // every pipeline fails to compile and the driver crashes moments later (issue #147), so
+    // explain the limitation instead.
+    if (g_vulkan && !g_capabilities.descriptorIndexing)
+    {
+        const std::string gpuName = g_device->getDescription().name;
+        LOGFN_ERROR("\"{}\" does not support Vulkan descriptor indexing, which the renderer requires. Stopping before pipeline creation.", gpuName);
+        const auto message = os::android::LocaliseMessage("vulkan_unsupported_gpu",
+            "This GPU's Vulkan driver does not support descriptor indexing, which the game requires.", gpuName);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, GameWindow::GetTitle(), message.c_str(), GameWindow::s_pWindow);
+        std::_Exit(1);
+    }
+#endif
+
+#if defined(__ANDROID__)
     // Testing hook: a force_no_bc.txt in the external driver_import folder (reachable over
     // MTP/file managers) or in the internal files dir (reachable via adb run-as, since
     // shell-created files under Android/data are not readable by the app on some devices)
