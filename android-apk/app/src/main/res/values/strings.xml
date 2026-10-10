@@ -203,4 +203,19 @@
     <string name="error_mod_integer">%1$s: enter a whole number.</string>
     <string name="error_mod_path">The settings file must be inside the mod folder.</string>
     <string name="error_mod_name">The configuration contains an invalid section or key name.</string>
+    <string name="launcher_share_log">Share log</string>
+    <string name="launcher_touch_vibration">Vibrate the phone with touch controls</string>
+    <string name="launcher_perf_preset">Performance preset</string>
+    <string name="launcher_perf_preset_hint">A preset sets resolution, shadows, textures, reflections and the FPS cap together. You can fine-tune them later in the in-game Video options.</string>
+    <string name="launcher_perf_applied">Preset applied: %1$s. It takes effect on the next launch.</string>
+    <string-array name="performance_preset_labels"><item>Low (weak devices)</item><item>Balanced (recommended)</item><item>Quality (flagship devices)</item></string-array>
+    <string name="launcher_game_running">A game session is still running in the background. Use Exit, open the app again and try once more.</string>
+    <string name="launcher_saves_export">Export saves</string>
+    <string name="launcher_saves_import">Import saves</string>
+    <string name="saves_exported">Saves exported (%1$d files).</string>
+    <string name="saves_import_confirm">Replace the current saves with the selected backup? The current saves are kept in a save-backup folder.</string>
+    <string name="saves_imported">Saves imported. The previous saves were kept in %1$s.</string>
+    <string name="error_saves_empty">There are no saves to export yet.</string>
+    <string name="error_saves_invalid">The selected file does not contain Unleashed Recomp save data (SYS-DATA).</string>
+    <string name="error_saves_failed">Could not transfer saves: %1$s</string>
 </resources>

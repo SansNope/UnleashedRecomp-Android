@@ -19,7 +19,8 @@ This is an unofficial Android port of [Unleashed Recompiled](https://github.com/
 - Installing the game and mods from a `.zip` or folder directly in the app — no PC needed
 - Staging Xbox 360 base-game, title-update and DLC package files for verified installation, including adding DLC to an installed game
 - Choosing game storage on internal memory or a mounted SD card, with optional verified copying of game files, mods, settings and saves
-- On-screen touch controls with multi-touch, touch camera control, and a drag-to-arrange layout editor with per-control sizes; the layout adapts to the game (D-pad in menus, a SKIP button in cutscenes)
+- On-screen touch controls with multi-touch, touch camera control, phone vibration, and a drag-to-arrange layout editor with per-control sizes, opacity and hidden controls; the layout adapts to the game (D-pad in menus, a SKIP button in cutscenes)
+- Performance presets, save backups (export/import as a zip) and one-tap log sharing in the launcher
 - Bluetooth and USB controllers
 - Sound through speakers, wired headphones, and Bluetooth devices, with presets for handhelds that start silent (AYN) and a low-latency profile
 - High refresh rate displays: FPS options above 60 are no longer capped by a 60 Hz display mode
@@ -86,7 +87,7 @@ The touch controller appears automatically when you touch the screen. It provide
 
 During in-engine cutscenes the controls collapse into a single **SKIP** button; the full layout returns when gameplay resumes.
 
-Every control can be repositioned and resized: tap **Controls** in the launcher to open the drag-to-arrange editor. Drag a control to move it. Tap a control and use **-** / **+** to resize only that control; tap empty space and use **-** / **+** to resize the whole set ([issue #169](https://github.com/SansNope/UnleashedRecomp-Android/issues/169)).
+Every control can be repositioned and resized: tap **Controls** in the launcher to open the drag-to-arrange editor. Drag a control to move it. Tap a control and use **-** / **+** to resize only that control; tap empty space and use **-** / **+** to resize the whole set ([issue #169](https://github.com/SansNope/UnleashedRecomp-Android/issues/169)). **HIDE** hides the selected control, and the **OPACITY** row at the bottom sets the transparency of the whole overlay ([issue #168](https://github.com/SansNope/UnleashedRecomp-Android/issues/168)).
 
 The layout adapts to context: the left stick becomes a directional pad in menus, on the world map, and on the results and level-up screens, and everything collapses to a single **SKIP** button during cutscenes and the attract movie.
 
@@ -145,7 +146,7 @@ Technical findings and current limitations for ExynosTools and PanVK are documen
 
 ## Performance on weaker devices
 
-The Android build already defaults to a 50% resolution scale, no anti-aliasing, and motion blur off. If that is not enough, the in-game Video options offer, roughly in order of impact:
+The Android build already defaults to a 50% resolution scale, no anti-aliasing, and motion blur off. The launcher's **Graphics** section has a **Performance preset** that applies a Low, Balanced or Quality set of the options below in one step. For finer control, the in-game Video options offer, roughly in order of impact:
 
 - **Resolution Scale** — the single biggest lever; it can go down to 25%.
 - **Texture Quality** (Full / Half / Quarter) — loads every texture at half or quarter resolution, cutting texture memory and GPU bandwidth like a low-resolution texture pack, but covering the base game, DLC, and mods with no extra files. UI and fonts stay sharp.
@@ -185,7 +186,7 @@ Close it normally if possible, reopen the app's transfer folder, and retrieve:
 
 The logger includes a hang watchdog, so `log.txt` may contain thread-state information even when no debugger was connected.
 
-When reporting a problem, include your phone model, SoC/GPU, Android version, selected driver, render mode, and the exact point where the problem occurred.
+When reporting a problem, include your phone model, SoC/GPU, Android version, selected driver, render mode, and the exact point where the problem occurred. **Share log** in the launcher's **Advanced** section sends the latest logs directly.
 
 ## For developers
 

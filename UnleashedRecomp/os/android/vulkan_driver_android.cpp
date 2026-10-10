@@ -154,6 +154,19 @@ static bool IsValidatedAdreno8xxSoc(std::string &socModel)
     return strncmp(socProp, "SM8750", 6) == 0;
 }
 
+// Adreno 8xx SoCs other than the validated SM8750: 8s Gen 4 (SM8735, Adreno 825),
+// 8 Elite Gen 5 (SM8850, Adreno 840) and later. The universal bundled Turnip has no gen8
+// device entries, the Adreno 8xx build is only validated on Adreno 830, and Adreno 840
+// renders artifacts with community Turnip builds but cleanly on the system driver (#96).
+static bool IsUnvalidatedAdreno8xxSoc(const std::string &socModel)
+{
+    if (socModel.size() < 6 || socModel.compare(0, 3, "SM8") != 0)
+        return false;
+
+    const int model = atoi(socModel.c_str() + 2);
+    return model >= 8735 && model != 8750;
+}
+
 static const char *VulkanDriverName(EAndroidVulkanDriver driver)
 {
     switch (driver)
@@ -1216,6 +1229,13 @@ void *AndroidGetCustomVulkanLoader()
                 {
                     driverName = ADRENO_8XX_DRIVER_NAME;
                     LOGF("Auto: SoC {} (Adreno 830) selects the Adreno 8xx driver.", socModel);
+                }
+                else if (IsUnvalidatedAdreno8xxSoc(socModel))
+                {
+                    // Like the non-Adreno path below: return before ArmCustomVulkanStartup.
+                    LOGF("Auto: SoC {} has an Adreno 8xx GPU without a validated bundled driver; using the system Vulkan driver.",
+                        socModel);
+                    return nullptr;
                 }
             }
             break;

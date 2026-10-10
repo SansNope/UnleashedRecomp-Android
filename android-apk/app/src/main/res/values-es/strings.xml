@@ -202,4 +202,19 @@
     <string name="error_mod_integer">%1$s: introduce un número entero.</string>
     <string name="error_mod_path">El archivo de ajustes debe estar dentro de la carpeta del mod.</string>
     <string name="error_mod_name">La configuración contiene un nombre de sección o clave no válido.</string>
+    <string name="launcher_share_log">Compartir registro</string>
+    <string name="launcher_touch_vibration">Vibrar el teléfono con los controles táctiles</string>
+    <string name="launcher_perf_preset">Perfil de rendimiento</string>
+    <string name="launcher_perf_preset_hint">Un perfil ajusta a la vez la resolución, las sombras, las texturas, los reflejos y el límite de FPS. Después puedes afinarlos en las opciones de vídeo del juego.</string>
+    <string name="launcher_perf_applied">Perfil aplicado: %1$s. Se aplicará en el próximo inicio.</string>
+    <string-array name="performance_preset_labels"><item>Bajo (dispositivos modestos)</item><item>Equilibrado (recomendado)</item><item>Calidad (gama alta)</item></string-array>
+    <string name="launcher_game_running">Una sesión de juego sigue en segundo plano. Toca Salir, vuelve a abrir la aplicación e inténtalo de nuevo.</string>
+    <string name="launcher_saves_export">Exportar partidas</string>
+    <string name="launcher_saves_import">Importar partidas</string>
+    <string name="saves_exported">Partidas exportadas (%1$d archivos).</string>
+    <string name="saves_import_confirm">¿Reemplazar las partidas actuales con la copia seleccionada? Las partidas actuales se conservan en una carpeta save-backup.</string>
+    <string name="saves_imported">Partidas importadas. Las anteriores se conservan en %1$s.</string>
+    <string name="error_saves_empty">Todavía no hay partidas para exportar.</string>
+    <string name="error_saves_invalid">El archivo seleccionado no contiene partidas de Unleashed Recomp (SYS-DATA).</string>
+    <string name="error_saves_failed">No se pudieron transferir las partidas: %1$s</string>
 </resources>

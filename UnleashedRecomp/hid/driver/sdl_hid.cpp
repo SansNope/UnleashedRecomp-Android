@@ -11,6 +11,12 @@
 #define TRANSLATE_INPUT(S, X) SDL_GameControllerGetButton(controller, S) << FirstBitLow(X)
 #define VIBRATION_TIMEOUT_MS 5000
 
+#ifdef __ANDROID__
+// Phone vibrator used for rumble while the touch overlay is the input (see SetPhoneVibration).
+static SDL_Haptic* s_phoneHaptic = nullptr;
+static float s_phoneVibration = 0.0f;
+#endif
+
 class Controller
 {
 public:
@@ -309,6 +315,14 @@ int HID_OnSDLEvent(void*, SDL_Event* event)
                 // Stop vibrating controllers on focus lost.
                 for (auto& controller : g_controllers)
                     controller.SetVibration({ 0, 0 });
+
+#ifdef __ANDROID__
+                if (s_phoneHaptic && s_phoneVibration > 0.0f)
+                {
+                    SDL_HapticRumbleStop(s_phoneHaptic);
+                    s_phoneVibration = 0.0f;
+                }
+#endif
             }
 
             break;
@@ -399,10 +413,67 @@ uint32_t hid::GetState(uint32_t dwUserIndex, XAMINPUT_STATE* pState)
     return ERROR_SUCCESS;
 }
 
+#ifdef __ANDROID__
+// With the touch overlay as the only input source, the game's rumble goes to the phone's
+// own vibrator, which SDL exposes as the "VIBRATOR_SERVICE" haptic device.
+static void SetPhoneVibration(const XAMINPUT_VIBRATION& vibration)
+{
+    static bool s_initialised = false;
+    SDL_Haptic*& s_haptic = s_phoneHaptic;
+    float& s_strength = s_phoneVibration;
+
+    if (!s_initialised)
+    {
+        s_initialised = true;
+        if (SDL_InitSubSystem(SDL_INIT_HAPTIC) == 0)
+        {
+            for (int i = 0; i < SDL_NumHaptics() && !s_haptic; i++)
+            {
+                const char* name = SDL_HapticName(i);
+                if (name && strcmp(name, "VIBRATOR_SERVICE") == 0)
+                    s_haptic = SDL_HapticOpen(i);
+            }
+        }
+
+        if (s_haptic && SDL_HapticRumbleInit(s_haptic) != 0)
+        {
+            SDL_HapticClose(s_haptic);
+            s_haptic = nullptr;
+        }
+
+        LOGF("Phone vibration for touch controls: {}.", s_haptic ? "available" : "unavailable");
+    }
+
+    if (!s_haptic)
+        return;
+
+    // The game repeats the same request every frame; only forward changes.
+    const float strength = std::max(vibration.wLeftMotorSpeed, vibration.wRightMotorSpeed) / 65535.0f;
+    if (strength == s_strength)
+        return;
+
+    s_strength = strength;
+    if (strength > 0.0f)
+        SDL_HapticRumblePlay(s_haptic, strength, VIBRATION_TIMEOUT_MS);
+    else
+        SDL_HapticRumbleStop(s_haptic);
+}
+#endif
+
 uint32_t hid::SetState(uint32_t dwUserIndex, XAMINPUT_VIBRATION* pVibration)
 {
     if (!pVibration)
         return ERROR_BAD_ARGUMENTS;
+
+#ifdef __ANDROID__
+    if (dwUserIndex == 0 && !g_activeController && TouchControls::IsVisible())
+    {
+        if (Config::TouchVibration)
+            SetPhoneVibration(*pVibration);
+
+        return ERROR_SUCCESS;
+    }
+#endif
 
     if (!g_activeController)
         return ERROR_DEVICE_NOT_CONNECTED;

@@ -202,4 +202,19 @@
     <string name="error_mod_integer">%1$s : saisissez un nombre entier.</string>
     <string name="error_mod_path">Le fichier des paramètres doit se trouver dans le dossier du mod.</string>
     <string name="error_mod_name">La configuration contient un nom de section ou de clé non valide.</string>
+    <string name="launcher_share_log">Partager le journal</string>
+    <string name="launcher_touch_vibration">Faire vibrer le téléphone avec les commandes tactiles</string>
+    <string name="launcher_perf_preset">Profil de performances</string>
+    <string name="launcher_perf_preset_hint">Un profil règle ensemble la résolution, les ombres, les textures, les reflets et la limite de FPS. Vous pourrez les ajuster ensuite dans les options vidéo du jeu.</string>
+    <string name="launcher_perf_applied">Profil appliqué : %1$s. Il prendra effet au prochain lancement.</string>
+    <string-array name="performance_preset_labels"><item>Bas (appareils modestes)</item><item>Équilibré (recommandé)</item><item>Qualité (haut de gamme)</item></string-array>
+    <string name="launcher_game_running">Une session de jeu tourne encore en arrière-plan. Touchez Quitter, rouvrez l’application et réessayez.</string>
+    <string name="launcher_saves_export">Exporter les sauvegardes</string>
+    <string name="launcher_saves_import">Importer les sauvegardes</string>
+    <string name="saves_exported">Sauvegardes exportées (%1$d fichiers).</string>
+    <string name="saves_import_confirm">Remplacer les sauvegardes actuelles par la copie choisie ? Les sauvegardes actuelles sont conservées dans un dossier save-backup.</string>
+    <string name="saves_imported">Sauvegardes importées. Les précédentes sont conservées dans %1$s.</string>
+    <string name="error_saves_empty">Il n’y a encore aucune sauvegarde à exporter.</string>
+    <string name="error_saves_invalid">Le fichier choisi ne contient pas de sauvegarde Unleashed Recomp (SYS-DATA).</string>
+    <string name="error_saves_failed">Impossible de transférer les sauvegardes : %1$s</string>
 </resources>

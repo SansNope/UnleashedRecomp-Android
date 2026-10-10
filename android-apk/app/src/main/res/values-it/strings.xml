@@ -202,4 +202,19 @@
     <string name="error_mod_integer">%1$s: inserisci un numero intero.</string>
     <string name="error_mod_path">Il file delle impostazioni deve trovarsi nella cartella del mod.</string>
     <string name="error_mod_name">La configurazione contiene un nome di sezione o chiave non valido.</string>
+    <string name="launcher_share_log">Condividi log</string>
+    <string name="launcher_touch_vibration">Vibrazione del telefono con i controlli touch</string>
+    <string name="launcher_perf_preset">Profilo prestazioni</string>
+    <string name="launcher_perf_preset_hint">Un profilo imposta insieme risoluzione, ombre, texture, riflessi e limite di FPS. Puoi rifinirli in seguito nelle opzioni video del gioco.</string>
+    <string name="launcher_perf_applied">Profilo applicato: %1$s. Avrà effetto al prossimo avvio.</string>
+    <string-array name="performance_preset_labels"><item>Basso (dispositivi modesti)</item><item>Bilanciato (consigliato)</item><item>Qualità (top di gamma)</item></string-array>
+    <string name="launcher_game_running">Una sessione di gioco è ancora attiva in background. Tocca Esci, riapri l’app e riprova.</string>
+    <string name="launcher_saves_export">Esporta salvataggi</string>
+    <string name="launcher_saves_import">Importa salvataggi</string>
+    <string name="saves_exported">Salvataggi esportati (%1$d file).</string>
+    <string name="saves_import_confirm">Sostituire i salvataggi attuali con la copia selezionata? I salvataggi attuali vengono conservati in una cartella save-backup.</string>
+    <string name="saves_imported">Salvataggi importati. I precedenti sono conservati in %1$s.</string>
+    <string name="error_saves_empty">Non ci sono ancora salvataggi da esportare.</string>
+    <string name="error_saves_invalid">Il file selezionato non contiene salvataggi di Unleashed Recomp (SYS-DATA).</string>
+    <string name="error_saves_failed">Impossibile trasferire i salvataggi: %1$s</string>
 </resources>

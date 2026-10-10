@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Launcher and controls
+
+- **Share log** in the launcher's **Advanced** section sends `log.txt` and `log_prev.txt` through Android's share sheet.
+- **Performance preset** in the **Graphics** section: Low, Balanced or Quality sets resolution scale, shadows, texture quality, reflections, GI filtering, depth of field, anisotropic filtering and the FPS cap in one step.
+- **Export saves** and **Import saves** in the **Game files** section. Export writes the save folder to a zip chosen with Android's file picker. Import accepts that zip, moves the current saves to `save-backup-<time>` and swaps the backup in; nothing is deleted.
+- The touch layout editor sets the overlay **opacity** (20-100%) and can **hide** individual controls, such as the triggers, which are then neither drawn nor pressed (issue #168).
+- While the touch overlay is the input, the game's rumble now vibrates the phone. It follows the in-game **Vibration** option and can be turned off in the launcher's **Controls** section.
+
+### Graphics drivers
+
+- Auto uses the system Vulkan driver on Snapdragon SoCs with Adreno 8xx GPUs other than the validated 8 Elite (SM8750): 8s Gen 4 (SM8735), 8 Elite Gen 5 (SM8850) and later. The bundled Turnip has no device entries for them, and Adreno 840 renders cleanly only on the system driver (issue #96).
+
 ### Mali
 
 - GPUs whose Vulkan driver lacks descriptor indexing (stock Mali Bifrost drivers such as Mali-G52 and G76) now get an explanation and a pointer to experimental PanVK driver packages, instead of failing every pipeline and crashing in `libGLES_mali.so` (issue #147).

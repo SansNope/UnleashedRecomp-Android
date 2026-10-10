@@ -202,4 +202,19 @@
     <string name="error_mod_integer">%1$s：整数を入力してください。</string>
     <string name="error_mod_path">設定ファイルはMODフォルダー内に指定してください。</string>
     <string name="error_mod_name">設定のセクション名またはキー名が無効です。</string>
+    <string name="launcher_share_log">ログを共有</string>
+    <string name="launcher_touch_vibration">タッチ操作時に端末を振動させる</string>
+    <string name="launcher_perf_preset">パフォーマンスプリセット</string>
+    <string name="launcher_perf_preset_hint">プリセットは解像度、影、テクスチャ、反射、FPS 上限をまとめて設定します。あとからゲーム内のビデオ設定で調整できます。</string>
+    <string name="launcher_perf_applied">プリセットを適用しました: %1$s。次回の起動から有効になります。</string>
+    <string-array name="performance_preset_labels"><item>低 (低性能端末)</item><item>バランス (推奨)</item><item>高画質 (ハイエンド端末)</item></string-array>
+    <string name="launcher_game_running">ゲームがバックグラウンドで実行中です。終了をタップし、アプリを開き直してからもう一度お試しください。</string>
+    <string name="launcher_saves_export">セーブをエクスポート</string>
+    <string name="launcher_saves_import">セーブをインポート</string>
+    <string name="saves_exported">セーブをエクスポートしました (%1$d ファイル)。</string>
+    <string name="saves_import_confirm">現在のセーブを選択したバックアップに置き換えますか? 現在のセーブは save-backup フォルダーに保管されます。</string>
+    <string name="saves_imported">セーブをインポートしました。以前のセーブは %1$s に保管されています。</string>
+    <string name="error_saves_empty">エクスポートできるセーブがまだありません。</string>
+    <string name="error_saves_invalid">選択したファイルに Unleashed Recomp のセーブデータ (SYS-DATA) が含まれていません。</string>
+    <string name="error_saves_failed">セーブを転送できませんでした: %1$s</string>
 </resources>

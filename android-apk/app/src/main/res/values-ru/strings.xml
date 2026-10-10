@@ -204,4 +204,19 @@
     <string name="error_mod_integer">%1$s: введите целое число.</string>
     <string name="error_mod_path">Файл настроек должен находиться внутри папки мода.</string>
     <string name="error_mod_name">В настройках указано недопустимое имя раздела или ключа.</string>
+    <string name="launcher_share_log">Поделиться логом</string>
+    <string name="launcher_touch_vibration">Вибрация телефона при сенсорном управлении</string>
+    <string name="launcher_perf_preset">Пресет производительности</string>
+    <string name="launcher_perf_preset_hint">Пресет одновременно задаёт разрешение, тени, текстуры, отражения и лимит FPS. Потом их можно подстроить в игровых настройках графики.</string>
+    <string name="launcher_perf_applied">Пресет применён: %1$s. Изменения вступят в силу при следующем запуске.</string>
+    <string-array name="performance_preset_labels"><item>Слабое (слабые устройства)</item><item>Сбалансированное (рекомендуется)</item><item>Качество (флагманы)</item></string-array>
+    <string name="launcher_game_running">Игровая сессия всё ещё работает в фоне. Нажмите «Выход», снова откройте приложение и повторите.</string>
+    <string name="launcher_saves_export">Экспорт сохранений</string>
+    <string name="launcher_saves_import">Импорт сохранений</string>
+    <string name="saves_exported">Сохранения экспортированы (файлов: %1$d).</string>
+    <string name="saves_import_confirm">Заменить текущие сохранения выбранной копией? Текущие сохранения будут перенесены в папку save-backup.</string>
+    <string name="saves_imported">Сохранения импортированы. Прежние сохранения лежат в %1$s.</string>
+    <string name="error_saves_empty">Пока нет сохранений для экспорта.</string>
+    <string name="error_saves_invalid">В выбранном файле нет сохранений Unleashed Recomp (SYS-DATA).</string>
+    <string name="error_saves_failed">Не удалось перенести сохранения: %1$s</string>
 </resources>

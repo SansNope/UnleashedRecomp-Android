@@ -202,4 +202,19 @@
     <string name="error_mod_integer">%1$s: Gib eine ganze Zahl ein.</string>
     <string name="error_mod_path">Die Einstellungsdatei muss im Mod-Ordner liegen.</string>
     <string name="error_mod_name">Die Konfiguration enthält einen ungültigen Abschnitts- oder Schlüsselnamen.</string>
+    <string name="launcher_share_log">Log teilen</string>
+    <string name="launcher_touch_vibration">Handy-Vibration bei Touch-Steuerung</string>
+    <string name="launcher_perf_preset">Leistungsprofil</string>
+    <string name="launcher_perf_preset_hint">Ein Profil stellt Auflösung, Schatten, Texturen, Spiegelungen und FPS-Limit gemeinsam ein. Feinanpassungen sind später in den Video-Optionen im Spiel möglich.</string>
+    <string name="launcher_perf_applied">Profil angewendet: %1$s. Es wird beim nächsten Start wirksam.</string>
+    <string-array name="performance_preset_labels"><item>Niedrig (schwache Geräte)</item><item>Ausgewogen (empfohlen)</item><item>Qualität (Flaggschiffe)</item></string-array>
+    <string name="launcher_game_running">Eine Spielsitzung läuft noch im Hintergrund. Tippe auf Beenden, öffne die App erneut und versuche es noch einmal.</string>
+    <string name="launcher_saves_export">Spielstände exportieren</string>
+    <string name="launcher_saves_import">Spielstände importieren</string>
+    <string name="saves_exported">Spielstände exportiert (%1$d Dateien).</string>
+    <string name="saves_import_confirm">Aktuelle Spielstände durch die gewählte Sicherung ersetzen? Die aktuellen Spielstände bleiben in einem save-backup-Ordner erhalten.</string>
+    <string name="saves_imported">Spielstände importiert. Die vorherigen Spielstände liegen in %1$s.</string>
+    <string name="error_saves_empty">Es gibt noch keine Spielstände zum Exportieren.</string>
+    <string name="error_saves_invalid">Die gewählte Datei enthält keine Unleashed-Recomp-Spielstände (SYS-DATA).</string>
+    <string name="error_saves_failed">Spielstände konnten nicht übertragen werden: %1$s</string>
 </resources>

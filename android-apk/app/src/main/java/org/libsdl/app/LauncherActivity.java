@@ -54,6 +54,8 @@ public final class LauncherActivity extends Activity {
     private static final int REQUEST_MOD_ZIP = 1004;
     private static final int REQUEST_MOD_TREE = 1005;
     private static final int REQUEST_GAME_PACKAGES = 1006;
+    private static final int REQUEST_SAVES_EXPORT = 1007;
+    private static final int REQUEST_SAVES_IMPORT = 1008;
     private static final int DRIVER_EXPERIMENTAL_A725 = 4;
     private static final int DRIVER_ADRENO_8XX = 5;
     private static final int DRIVER_IMPORTED = 6;
@@ -114,6 +116,7 @@ public final class LauncherActivity extends Activity {
     private CompoundButton validation;
     private CompoundButton gfxCapture;
     private CompoundButton forceBc;
+    private CompoundButton touchVibration;
     private SharedPreferences prefs;
     private InstallState lastInstallState;
     private TextView storageStatus;
@@ -313,6 +316,9 @@ public final class LauncherActivity extends Activity {
         storageStatus.setPadding(0, dp(16), 0, 0);
         section.addView(storageStatus);
         buttonGrid(section, button(R.string.storage_choose, view -> chooseStorage()));
+        buttonGrid(section,
+            button(R.string.launcher_saves_export, view -> exportSaves()),
+            button(R.string.launcher_saves_import, view -> importSaves()));
     }
 
     private void buildGraphicsSection(LinearLayout section) {
@@ -337,6 +343,8 @@ public final class LauncherActivity extends Activity {
         buttonGrid(section,
             button(R.string.launcher_import_driver, view -> chooseDriver()),
             button(R.string.launcher_driver_folder, view -> openFiles("transfer")));
+        section.addView(hint(getString(R.string.launcher_perf_preset_hint)));
+        buttonGrid(section, button(R.string.launcher_perf_preset, view -> choosePerformancePreset()));
     }
 
     private void buildAudioSection(LinearLayout section) {
@@ -360,6 +368,7 @@ public final class LauncherActivity extends Activity {
     // renderer.
     private void buildControlsSection(LinearLayout section) {
         section.addView(hint(getString(R.string.launcher_controls_moved)));
+        touchVibration = switchRow(section, R.string.launcher_touch_vibration);
         buttonGrid(section, button(R.string.launcher_edit_layout, view -> launchLayoutEditor()));
     }
 
@@ -386,7 +395,9 @@ public final class LauncherActivity extends Activity {
         diagnosticsStatus = statusText();
         diagnosticsStatus.setPadding(0, dp(12), 0, 0);
         section.addView(diagnosticsStatus);
-        buttonGrid(section, button(R.string.launcher_open_logs, view -> openFiles("transfer")));
+        buttonGrid(section,
+            button(R.string.launcher_share_log, view -> shareLogs()),
+            button(R.string.launcher_open_logs, view -> openFiles("transfer")));
     }
 
     private void addSection(LinearLayout rail, LinearLayout content, int railLabelId, int titleId,
@@ -446,6 +457,194 @@ public final class LauncherActivity extends Activity {
                 android.os.Process.killProcess(android.os.Process.myPid());
             })
             .show();
+    }
+
+    // ------------------------------------------------------------------
+    // Logs, performance presets and save backups.
+    // ------------------------------------------------------------------
+
+    /** Shares log.txt and log_prev.txt through the app's documents provider. */
+    private void shareLogs() {
+        File transfer = AppStorage.transferRoot(this);
+        ArrayList<Uri> uris = new ArrayList<>();
+        for (String name : new String[] { "log.txt", "log_prev.txt" }) {
+            if (!new File(transfer, name).isFile()) continue;
+            String documentId = "transfer:" + android.util.Base64.encodeToString(name.getBytes(StandardCharsets.UTF_8),
+                android.util.Base64.URL_SAFE | android.util.Base64.NO_WRAP);
+            uris.add(DocumentsContract.buildDocumentUri(getPackageName() + ".documents", documentId));
+        }
+        if (uris.isEmpty()) {
+            showError(getString(R.string.launcher_log_missing));
+            return;
+        }
+        Intent send = new Intent(uris.size() == 1 ? Intent.ACTION_SEND : Intent.ACTION_SEND_MULTIPLE);
+        send.setType("text/plain");
+        if (uris.size() == 1) send.putExtra(Intent.EXTRA_STREAM, uris.get(0));
+        else send.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
+        ClipData clip = ClipData.newRawUri("log", uris.get(0));
+        for (int i = 1; i < uris.size(); i++) clip.addItem(new ClipData.Item(uris.get(i)));
+        send.setClipData(clip);
+        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try {
+            startActivity(Intent.createChooser(send, getString(R.string.launcher_share_log)));
+        } catch (Exception exception) {
+            showError(getString(R.string.error_open_files));
+        }
+    }
+
+    /** A running game rewrites config.toml and the save file, so both changes need it closed. */
+    private boolean refuseWhileGameRuns() {
+        if (!SDLActivity.isGameStorageLocked()) return false;
+        showError(getString(R.string.launcher_game_running));
+        return true;
+    }
+
+    private void choosePerformancePreset() {
+        if (refuseWhileGameRuns()) return;
+        new AlertDialog.Builder(this)
+            .setTitle(R.string.launcher_perf_preset)
+            .setItems(R.array.performance_preset_labels, (dialog, which) -> applyPerformancePreset(which))
+            .show();
+    }
+
+    /** Low, Balanced and Quality, in the order of R.array.performance_preset_labels. */
+    private void applyPerformancePreset(int preset) {
+        String[] resolution = { "0.35", "0.5", "0.75" };
+        String[] shadows = { "512", "1024", "2048" };
+        String[] textures = { "Half", "Full", "Full" };
+        String[] reflections = { "false", "true", "true" };
+        String[] giFiltering = { "Bilinear", "Bilinear", "Bicubic" };
+        String[] depthOfField = { "Low", "Auto", "Auto" };
+        String[] fps = { "30", "60", "60" };
+        String[] anisotropy = { "2", "4", "8" };
+        LinkedHashMap<String, String> values = new LinkedHashMap<>();
+        values.put("Video.ResolutionScale", resolution[preset]);
+        values.put("Video.ShadowResolution", quote(shadows[preset]));
+        values.put("Video.TextureQuality", quote(textures[preset]));
+        values.put("Video.PlanarReflections", reflections[preset]);
+        values.put("Video.GITextureFiltering", quote(giFiltering[preset]));
+        values.put("Video.DepthOfFieldQuality", quote(depthOfField[preset]));
+        values.put("Video.FPS", fps[preset]);
+        values.put("Video.AnisotropicFiltering", anisotropy[preset]);
+        values.put("Video.AntiAliasing", quote("None"));
+        values.put("Video.TransparencyAntiAliasing", "false");
+        values.put("Video.MotionBlur", quote("Off"));
+        try {
+            AppStorage.validateRoot(this, AppStorage.activeGameRoot(this));
+            patchConfig(AppStorage.configFile(this), values);
+            String label = getResources().getStringArray(R.array.performance_preset_labels)[preset];
+            Toast.makeText(this, getString(R.string.launcher_perf_applied, label), Toast.LENGTH_LONG).show();
+        } catch (IOException exception) {
+            showError(getString(R.string.error_settings_save, FileErrorMessages.describe(this, exception)));
+        }
+    }
+
+    private void exportSaves() {
+        File[] saves = AppStorage.saveDir(this).listFiles();
+        if (saves == null || saves.length == 0) {
+            showError(getString(R.string.error_saves_empty));
+            return;
+        }
+        String stamp = new java.text.SimpleDateFormat("yyyyMMdd-HHmm", Locale.ROOT).format(new java.util.Date());
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/zip");
+        intent.putExtra(Intent.EXTRA_TITLE, "UnleashedRecomp-saves-" + stamp + ".zip");
+        startActivityForResult(intent, REQUEST_SAVES_EXPORT);
+    }
+
+    private void writeSavesZip(Uri target) {
+        File root = AppStorage.saveDir(this);
+        int[] count = { 0 };
+        try (java.io.OutputStream stream = getContentResolver().openOutputStream(target, "wt")) {
+            if (stream == null) throw new LocalizedIOException("error_io_read", target);
+            try (java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(stream)) {
+                addToZip(zip, root, "", count);
+            }
+            Toast.makeText(this, getString(R.string.saves_exported, count[0]), Toast.LENGTH_LONG).show();
+        } catch (IOException exception) {
+            showError(getString(R.string.error_saves_failed, FileErrorMessages.describe(this, exception)));
+        }
+    }
+
+    private static void addToZip(java.util.zip.ZipOutputStream zip, File directory, String prefix, int[] count)
+            throws IOException {
+        File[] children = directory.listFiles();
+        if (children == null) return;
+        for (File child : children) {
+            String name = prefix + child.getName();
+            if (child.isDirectory()) {
+                addToZip(zip, child, name + "/", count);
+            } else if (child.isFile()) {
+                zip.putNextEntry(new java.util.zip.ZipEntry(name));
+                Files.copy(child.toPath(), zip);
+                zip.closeEntry();
+                count[0]++;
+            }
+        }
+    }
+
+    private void importSaves() {
+        if (refuseWhileGameRuns()) return;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {
+            "application/zip", "application/x-zip-compressed", "application/octet-stream" });
+        startActivityForResult(intent, REQUEST_SAVES_IMPORT);
+    }
+
+    private void confirmSavesImport(Uri source) {
+        new AlertDialog.Builder(this)
+            .setMessage(R.string.saves_import_confirm)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.launcher_saves_import, (dialog, which) -> replaceSaves(source))
+            .show();
+    }
+
+    /**
+     * Extracts the backup next to the save folder, then swaps it in. The current saves are
+     * renamed to save-backup-<time> rather than deleted, so an import can always be undone.
+     */
+    private void replaceSaves(Uri source) {
+        if (refuseWhileGameRuns()) return;
+        File saveDir = AppStorage.saveDir(this);
+        File parent = saveDir.getParentFile();
+        File staging = new File(parent, "save-import.part");
+        try {
+            deleteImportBatch(staging);
+            try (InputStream input = openSourceStream(source)) {
+                InstallerArchive.extract(input, staging, () -> false, bytes -> { });
+            }
+            File importedRoot = locateSaveRoot(staging);
+            if (importedRoot == null) throw new LocalizedIOException("error_saves_invalid", null);
+
+            String stamp = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new java.util.Date());
+            File backup = new File(parent, "save-backup-" + stamp);
+            if (saveDir.exists()) Files.move(saveDir.toPath(), backup.toPath());
+            try {
+                Files.move(importedRoot.toPath(), saveDir.toPath());
+            } catch (IOException exception) {
+                if (backup.exists()) Files.move(backup.toPath(), saveDir.toPath());
+                throw exception;
+            }
+            Toast.makeText(this, getString(R.string.saves_imported, backup.getName()), Toast.LENGTH_LONG).show();
+        } catch (IOException exception) {
+            showError(getString(R.string.error_saves_failed, FileErrorMessages.describe(this, exception)));
+        } finally {
+            deleteImportBatch(staging);
+        }
+    }
+
+    /** SYS-DATA at the top of the archive or inside a single wrapper folder. */
+    private static File locateSaveRoot(File extracted) {
+        if (new File(extracted, "SYS-DATA").isFile()) return extracted;
+        File[] children = extracted.listFiles();
+        if (children != null && children.length == 1 && children[0].isDirectory()
+                && new File(children[0], "SYS-DATA").isFile()) {
+            return children[0];
+        }
+        return null;
     }
 
     private void refreshStatuses() {
@@ -579,6 +778,8 @@ public final class LauncherActivity extends Activity {
         select(audioPresetSpinner, config.get("Audio.AndroidAudioPreset"), AUDIO_PRESET_VALUES);
         applyDriverPresetToLauncher();
         skipIntro.setChecked(Boolean.parseBoolean(config.get("Codes.SkipIntroLogos")));
+        String vibration = config.get("Input.TouchVibration");
+        touchVibration.setChecked(vibration == null || Boolean.parseBoolean(vibration));
         validation.setChecked(new File(getFilesDir(), "turnip/vk_layer_settings.txt").isFile());
         gfxCapture.setChecked(new File(AppStorage.driverImportDir(this), "gfxrecon_capture.txt").isFile());
         forceBc.setChecked(new File(getFilesDir(), "force_bc.txt").isFile());
@@ -591,6 +792,7 @@ public final class LauncherActivity extends Activity {
         values.put("Video.RenderMode", quote(RENDER_MODE_VALUES[renderSpinner.getSelectedItemPosition()]));
         values.put("Audio.AndroidAudioPreset", quote(AUDIO_PRESET_VALUES[audioPresetSpinner.getSelectedItemPosition()]));
         values.put("Codes.SkipIntroLogos", Boolean.toString(skipIntro.isChecked()));
+        values.put("Input.TouchVibration", Boolean.toString(touchVibration.isChecked()));
         try {
             AppStorage.validateRoot(this, AppStorage.activeGameRoot(this));
             patchConfig(AppStorage.configFile(this), values);
@@ -694,6 +896,14 @@ public final class LauncherActivity extends Activity {
         if (resultCode != RESULT_OK || data == null) return;
         if (requestCode == REQUEST_GAME_PACKAGES) {
             stageGamePackages(data);
+            return;
+        }
+        if (requestCode == REQUEST_SAVES_EXPORT && data.getData() != null) {
+            writeSavesZip(data.getData());
+            return;
+        }
+        if (requestCode == REQUEST_SAVES_IMPORT && data.getData() != null) {
+            confirmSavesImport(data.getData());
             return;
         }
         if (data.getData() == null) return;

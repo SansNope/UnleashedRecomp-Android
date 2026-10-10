@@ -18,6 +18,8 @@ CONFIG_DEFINE_LOCALISED("Input", bool, AllowBackgroundInput, false);
 CONFIG_DEFINE_ENUM_LOCALISED("Input", EAndroidTouchControlsPolicy, TouchControls, EAndroidTouchControlsPolicy::Auto);
 CONFIG_DEFINE_ENUM_LOCALISED("Input", EAndroidTouchCameraMode, TouchCamera, EAndroidTouchCameraMode::TouchArea);
 CONFIG_DEFINE_ENUM_LOCALISED("Input", EAndroidTouchStickMode, TouchStickMode, EAndroidTouchStickMode::Analog);
+// Set from the launcher: send the game's rumble to the phone while the touch overlay is the input.
+CONFIG_DEFINE("Input", bool, TouchVibration, true);
 #endif
 CONFIG_DEFINE_ENUM_LOCALISED("Input", EControllerIcons, ControllerIcons, EControllerIcons::Auto);
 
