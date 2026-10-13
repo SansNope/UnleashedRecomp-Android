@@ -75,6 +75,8 @@ CONFIG_DEFINE_LOCALISED("Video", float, ResolutionScale, 0.5f);
 #else
 CONFIG_DEFINE_LOCALISED("Video", float, ResolutionScale, 1.0f);
 #endif
+CONFIG_DEFINE_LOCALISED("Video", bool, FSR, false);
+CONFIG_DEFINE_LOCALISED("Video", float, FSRSharpness, 0.2f);
 CONFIG_DEFINE_LOCALISED("Video", bool, Fullscreen, true);
 CONFIG_DEFINE_LOCALISED("Video", bool, VSync, true);
 CONFIG_DEFINE_ENUM("Video", ETripleBuffering, TripleBuffering, ETripleBuffering::Auto);

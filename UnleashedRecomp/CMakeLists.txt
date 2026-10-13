@@ -478,20 +478,38 @@ endif()
 target_precompile_headers(UnleashedRecomp PUBLIC ${UNLEASHED_RECOMP_PRECOMPILED_HEADERS})
 
 function(compile_shader FILE_PATH TARGET_NAME)
+    set(SHADER_LANGUAGE_VERSION 2021)
+    set(SHADER_INCLUDE_DEPENDS "")
+    set(SHADER_EXTRA_FLAGS "")
+    if(FILE_PATH MATCHES "^fsr_")
+        # AMD's original headers use vector ternaries from HLSL 2018.
+        set(SHADER_LANGUAGE_VERSION 2018)
+        set(SHADER_INCLUDE_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/gpu/shader/fsr_common.hlsli"
+            "${UNLEASHED_RECOMP_THIRDPARTY_ROOT}/FidelityFX-FSR/ffx_a.h"
+            "${UNLEASHED_RECOMP_THIRDPARTY_ROOT}/FidelityFX-FSR/ffx_fsr1.h")
+        if(FILE_PATH MATCHES "_fp16_")
+            set(TARGET_NAME ps_6_2)
+            set(SHADER_EXTRA_FLAGS -enable-16bit-types)
+            list(APPEND SHADER_INCLUDE_DEPENDS
+                "${CMAKE_CURRENT_SOURCE_DIR}/gpu/shader/fsr_easu_ps.hlsl"
+                "${CMAKE_CURRENT_SOURCE_DIR}/gpu/shader/fsr_rcas_ps.hlsl")
+        endif()
+    endif()
     set(FILE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/gpu/shader/${FILE_PATH}.hlsl)
     cmake_path(GET FILE_PATH STEM VARIABLE_NAME)
     if (UNLEASHED_RECOMP_D3D12)
         add_custom_command(
             OUTPUT ${FILE_PATH}.dxil.h
-            COMMAND ${DIRECTX_DXC_TOOL} -T ${TARGET_NAME} -HV 2021 -all-resources-bound -Wno-ignored-attributes -Fh ${FILE_PATH}.dxil.h ${FILE_PATH} -Vn g_${VARIABLE_NAME}_dxil
-            DEPENDS ${FILE_PATH}
+            COMMAND ${DIRECTX_DXC_TOOL} -T ${TARGET_NAME} -HV ${SHADER_LANGUAGE_VERSION} ${SHADER_EXTRA_FLAGS} -all-resources-bound -Wno-ignored-attributes -Fh ${FILE_PATH}.dxil.h ${FILE_PATH} -Vn g_${VARIABLE_NAME}_dxil
+            DEPENDS ${FILE_PATH} ${SHADER_INCLUDE_DEPENDS}
         )
         target_sources(UnleashedRecomp PRIVATE ${FILE_PATH}.dxil.h)
     endif()
     add_custom_command(
         OUTPUT ${FILE_PATH}.spirv.h
-        COMMAND ${DIRECTX_DXC_TOOL} -T ${TARGET_NAME} -HV 2021 -all-resources-bound -spirv -fvk-use-dx-layout ${ARGN} -Fh ${FILE_PATH}.spirv.h ${FILE_PATH} -Vn g_${VARIABLE_NAME}_spirv
-        DEPENDS ${FILE_PATH}
+        COMMAND ${DIRECTX_DXC_TOOL} -T ${TARGET_NAME} -HV ${SHADER_LANGUAGE_VERSION} ${SHADER_EXTRA_FLAGS} -all-resources-bound -spirv -fvk-use-dx-layout ${ARGN} -Fh ${FILE_PATH}.spirv.h ${FILE_PATH} -Vn g_${VARIABLE_NAME}_spirv
+        DEPENDS ${FILE_PATH} ${SHADER_INCLUDE_DEPENDS}
     )
     target_sources(UnleashedRecomp PRIVATE ${FILE_PATH}.spirv.h)
 endfunction()
@@ -517,6 +535,10 @@ compile_pixel_shader(gaussian_blur_5x5)
 compile_pixel_shader(gaussian_blur_7x7)
 compile_pixel_shader(gaussian_blur_9x9)
 compile_pixel_shader(gamma_correction_ps)
+compile_pixel_shader(fsr_easu_ps)
+compile_pixel_shader(fsr_rcas_ps)
+compile_pixel_shader(fsr_easu_fp16_ps)
+compile_pixel_shader(fsr_rcas_fp16_ps)
 compile_pixel_shader(imgui_ps)
 compile_vertex_shader(imgui_vs)
 compile_pixel_shader(movie_ps)

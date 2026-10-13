@@ -52,6 +52,26 @@
 #define CONFIG_DEFINE_ENUM_LOCALE(type) \
     CONFIG_ENUM_LOCALE(type) g_##type##_locale =
 
+CONFIG_DEFINE_LOCALE(FSR)
+{
+    { ELanguage::English, { "AMD FSR 1", "Upscale the 3D scene with FidelityFX Super Resolution 1. Use a resolution scale below 100%. The interface stays at display resolution." } },
+    { ELanguage::Japanese, { "AMD FSR 1", "3Dシーンを\u200B[拡大:かくだい]します。\u200B[解像度:かいぞうど]スケールを100%より\u200B[低:ひく]くしてください。\u200BUIの[解像度:かいぞうど]は\u200B[変:か]わりません。" } },
+    { ELanguage::German, { "AMD FSR 1", "Skaliert die 3D-Szene mit FidelityFX Super Resolution 1. Wähle eine Rendering-Auflösung unter 100%. Die Oberfläche bleibt in Bildschirmauflösung." } },
+    { ELanguage::French, { "AMD FSR 1", "Agrandit la scène 3D avec FidelityFX Super Resolution 1. Utilise une échelle de rendu inférieure à 100 %. L'interface conserve la résolution de l'écran." } },
+    { ELanguage::Spanish, { "AMD FSR 1", "Amplía la escena 3D con FidelityFX Super Resolution 1. Usa una escala de resolución inferior al 100 %. La interfaz conserva la resolución de pantalla." } },
+    { ELanguage::Italian, { "AMD FSR 1", "Ingrandisce la scena 3D con FidelityFX Super Resolution 1. Usa una scala di risoluzione inferiore al 100%. L'interfaccia mantiene la risoluzione dello schermo." } }
+};
+
+CONFIG_DEFINE_LOCALE(FSRSharpness)
+{
+    { ELanguage::English, { "FSR Sharpness", "Adjust sharpening after FSR upscaling. Zero disables sharpening. Higher values can emphasize aliasing." } },
+    { ELanguage::Japanese, { "FSRシャープネス", "FSRの\u200B[鮮明:せんめい]さを\u200B[調整:ちょうせい]します。0で\u200B[無効:むこう]になります。\u200B[高:たか]すぎると\u200Bジャギーが\u200B[目立:めだ]つ[場合:ばあい]があります。" } },
+    { ELanguage::German, { "FSR-Schärfe", "Passt die Schärfung nach der FSR-Skalierung an. Null deaktiviert die Schärfung. Höhere Werte können Treppeneffekte verstärken." } },
+    { ELanguage::French, { "Netteté FSR", "Règle la netteté après agrandissement FSR. Zéro désactive l'accentuation. Des valeurs élevées peuvent accentuer les contours crénelés." } },
+    { ELanguage::Spanish, { "Nitidez FSR", "Ajusta la nitidez tras ampliar con FSR. Cero desactiva el enfoque. Los valores altos pueden acentuar los bordes dentados." } },
+    { ELanguage::Italian, { "Nitidezza FSR", "Regola la nitidezza dopo l'ingrandimento FSR. Zero disattiva il filtro. Valori alti possono accentuare i bordi seghettati." } }
+};
+
 // Japanese Notes: This localization should include furigana.
 CONFIG_DEFINE_LOCALE(Language)
 {

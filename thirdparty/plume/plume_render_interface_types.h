@@ -1889,6 +1889,10 @@ namespace plume {
         // Geometry shaders.
         bool geometryShader = false;
 
+        // Native 16-bit arithmetic, enabled on the logical device.
+        bool shaderFloat16 = false;
+        bool shaderInt16 = false;
+
         // Raytracing.
         bool raytracing = false;
         bool raytracingStateUpdate = false;

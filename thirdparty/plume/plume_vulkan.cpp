@@ -98,6 +98,7 @@ namespace plume {
         VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME,
         VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
         VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME,
+        VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,
         // Optional: when nullDescriptor is unavailable the backend already substitutes a dummy
         // vertex buffer, and MIRROR_ONCE samplers fall back to MIRRORED_REPEAT.
         VK_EXT_ROBUSTNESS_2_EXTENSION_NAME,
@@ -3994,6 +3995,7 @@ namespace plume {
         VkPhysicalDeviceVulkan12Features vulkan12Features = {};
         VkPhysicalDeviceDescriptorIndexingFeatures indexingFeatures = {};
         VkPhysicalDeviceScalarBlockLayoutFeatures layoutFeatures = {};
+        VkPhysicalDeviceShaderFloat16Int8Features float16Features = {};
         if (coreVulkan12) {
             vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
             featuresChain = &vulkan12Features;
@@ -4005,6 +4007,13 @@ namespace plume {
             layoutFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES;
             layoutFeatures.pNext = featuresChain;
             featuresChain = &layoutFeatures;
+        }
+
+        const bool float16Extension = supportedOptionalExtensions.find(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME) != supportedOptionalExtensions.end();
+        if (!coreVulkan12 && float16Extension) {
+            float16Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES;
+            float16Features.pNext = featuresChain;
+            featuresChain = &float16Features;
         }
 
         VkPhysicalDevicePresentIdFeaturesKHR presentIdFeatures = {};
@@ -4088,6 +4097,7 @@ namespace plume {
             vkGetPhysicalDeviceProperties2(physicalDevice, &deviceProperties2);
         }
         const bool scalarBlockLayout = coreVulkan12 ? bool(vulkan12Features.scalarBlockLayout) : bool(layoutFeatures.scalarBlockLayout);
+        const bool shaderFloat16 = coreVulkan12 ? bool(vulkan12Features.shaderFloat16) : bool(float16Features.shaderFloat16);
         const bool samplerMirrorClampToEdge =
             (coreVulkan12 && vulkan12Features.samplerMirrorClampToEdge) ||
             (supportedOptionalExtensions.find(VK_KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE_EXTENSION_NAME) != supportedOptionalExtensions.end());
@@ -4111,6 +4121,13 @@ namespace plume {
         }
 
         const bool presentWait = presentIdFeatures.presentId && presentWaitFeatures.presentWait;
+        if (!coreVulkan12 && shaderFloat16) {
+            // Float16 arithmetic needs no 16-bit uniform/storage interfaces.
+            // Do not mix this promoted struct with Vulkan12Features.
+            float16Features.shaderInt8 = VK_FALSE;
+            float16Features.pNext = createDeviceChain;
+            createDeviceChain = &float16Features;
+        }
         if (presentWait) {
             presentIdFeatures.pNext = createDeviceChain;
             createDeviceChain = &presentIdFeatures;
@@ -4310,6 +4327,8 @@ namespace plume {
 
         // Fill capabilities.
         capabilities.geometryShader = deviceFeatures.features.geometryShader;
+        capabilities.shaderFloat16 = shaderFloat16;
+        capabilities.shaderInt16 = deviceFeatures.features.shaderInt16;
         capabilities.raytracing = rtSupported;
         capabilities.raytracingStateUpdate = false;
         capabilities.sampleLocations = sampleLocationsSupported;

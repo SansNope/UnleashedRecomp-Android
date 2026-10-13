@@ -64,6 +64,10 @@
 #include "shader/csd_vs.hlsl.dxil.h"
 #include "shader/enhanced_motion_blur_ps.hlsl.dxil.h"
 #include "shader/gamma_correction_ps.hlsl.dxil.h"
+#include "shader/fsr_easu_ps.hlsl.dxil.h"
+#include "shader/fsr_rcas_ps.hlsl.dxil.h"
+#include "shader/fsr_easu_fp16_ps.hlsl.dxil.h"
+#include "shader/fsr_rcas_fp16_ps.hlsl.dxil.h"
 #include "shader/gaussian_blur_3x3.hlsl.dxil.h"
 #include "shader/gaussian_blur_5x5.hlsl.dxil.h"
 #include "shader/gaussian_blur_7x7.hlsl.dxil.h"
@@ -89,6 +93,10 @@
 #include "shader/csd_vs.hlsl.spirv.h"
 #include "shader/enhanced_motion_blur_ps.hlsl.spirv.h"
 #include "shader/gamma_correction_ps.hlsl.spirv.h"
+#include "shader/fsr_easu_ps.hlsl.spirv.h"
+#include "shader/fsr_rcas_ps.hlsl.spirv.h"
+#include "shader/fsr_easu_fp16_ps.hlsl.spirv.h"
+#include "shader/fsr_rcas_fp16_ps.hlsl.spirv.h"
 #include "shader/gaussian_blur_3x3.hlsl.spirv.h"
 #include "shader/gaussian_blur_5x5.hlsl.spirv.h"
 #include "shader/gaussian_blur_7x7.hlsl.spirv.h"
@@ -1317,6 +1325,33 @@ static const std::pair<GuestRenderState, PPCFunc*> g_setRenderStateFunctions[] =
 
 static std::unique_ptr<RenderShader> g_copyShader;
 
+static std::unique_ptr<RenderPipeline> g_fsrEasuPipeline;
+static std::unique_ptr<RenderPipeline> g_fsrRcasPipeline;
+static std::unique_ptr<RenderPipeline> g_fsrEasuFp16Pipeline;
+static std::unique_ptr<RenderPipeline> g_fsrRcasFp16Pipeline;
+static uint32_t g_fsrSamplerIndex;
+
+struct FsrFrame
+{
+    std::unique_ptr<GuestSurface> scene;
+    std::unique_ptr<GuestSurface> easu;
+};
+// Each frame owns its targets and descriptors. Resizing one cannot invalidate
+// resources referenced by another in-flight command list.
+static FsrFrame g_fsrFrames[NUM_FRAMES];
+
+struct FsrConstants
+{
+    uint32_t textureIndex;
+    uint32_t samplerIndex;
+    uint32_t inputWidth;
+    uint32_t inputHeight;
+    uint32_t outputWidth;
+    uint32_t outputHeight;
+    float sharpness;
+};
+static_assert(sizeof(FsrConstants) == 28);
+
 static std::unique_ptr<RenderShader> g_copyColorShader;
 static ankerl::unordered_dense::map<RenderFormat, std::unique_ptr<RenderPipeline>> g_copyColorPipelines;
 static std::unique_ptr<RenderPipeline> g_copyDepthPipeline;
@@ -2278,6 +2313,42 @@ bool Video::CreateHostDevice(const char *sdlVideoDriver, bool graphicsApiRetry)
     desc.renderTargetBlend[0] = RenderBlendDesc::Copy();
     desc.renderTargetCount = 1;
     g_gammaCorrectionPipeline = g_device->createGraphicsPipeline(desc);
+
+    auto fsrEasuShader = CREATE_SHADER(fsr_easu_ps);
+    auto fsrRcasShader = CREATE_SHADER(fsr_rcas_ps);
+    desc.pixelShader = fsrEasuShader.get();
+    g_fsrEasuPipeline = g_device->createGraphicsPipeline(desc);
+    desc.pixelShader = fsrRcasShader.get();
+    g_fsrRcasPipeline = g_device->createGraphicsPipeline(desc);
+
+    // Only create native half shaders when those features were enabled on the
+    // logical device. D3D12 and unsupported Vulkan drivers retain FP32.
+    g_fsrEasuFp16Pipeline.reset();
+    g_fsrRcasFp16Pipeline.reset();
+    if (g_vulkan && g_capabilities.shaderFloat16 && g_capabilities.shaderInt16)
+    {
+        auto easuFp16Shader = CREATE_SHADER(fsr_easu_fp16_ps);
+        auto rcasFp16Shader = CREATE_SHADER(fsr_rcas_fp16_ps);
+        desc.pixelShader = easuFp16Shader.get();
+        g_fsrEasuFp16Pipeline = g_device->createGraphicsPipeline(desc);
+        desc.pixelShader = rcasFp16Shader.get();
+        g_fsrRcasFp16Pipeline = g_device->createGraphicsPipeline(desc);
+    }
+    LOGF("FSR precision: native FP16 available={} (float16={}, int16={}); FP32 fallback retained",
+        bool(g_fsrEasuFp16Pipeline && g_fsrRcasFp16Pipeline), g_capabilities.shaderFloat16, g_capabilities.shaderInt16);
+
+    RenderSamplerDesc fsrSamplerDesc;
+    fsrSamplerDesc.addressU = RenderTextureAddressMode::CLAMP;
+    fsrSamplerDesc.addressV = RenderTextureAddressMode::CLAMP;
+    fsrSamplerDesc.addressW = RenderTextureAddressMode::CLAMP;
+    auto& [fsrSamplerIndex, fsrSampler] = g_samplerStates[XXH3_64bits(&fsrSamplerDesc, sizeof(fsrSamplerDesc))];
+    if (fsrSamplerIndex == 0)
+    {
+        fsrSamplerIndex = g_samplerStates.size();
+        fsrSampler = g_device->createSampler(fsrSamplerDesc);
+        g_samplerDescriptorSet->setSampler(fsrSamplerIndex - 1, fsrSampler.get());
+    }
+    g_fsrSamplerIndex = fsrSamplerIndex - 1;
 
     // NOTE: We initially allocate this on host memory to make the installer work, even if the 4 GB memory allocation fails.
     g_backBufferHolder = std::make_unique<GuestSurface>(ResourceType::RenderTarget);
@@ -4752,7 +4823,7 @@ static void ProcAddPipeline(const RenderCommand& cmd)
 static constexpr int32_t COMMON_DEPTH_BIAS_VALUE = int32_t((1 << 24) * 0.002f);
 static constexpr float COMMON_SLOPE_SCALED_DEPTH_BIAS_VALUE = 1.0f;
 
-static void FlushRenderStateForRenderThread()
+static void FlushRenderStateForRenderThread(const RenderViewport* originalViewport = nullptr)
 {
     auto renderTarget = g_pipelineState.colorWriteEnable ? g_renderTarget : nullptr;
     auto depthStencil = g_pipelineState.zEnable ? g_depthStencil : nullptr;
@@ -4786,6 +4857,14 @@ static void FlushRenderStateForRenderThread()
     FlushBarriers();
 
     SetFramebuffer(renderTarget, depthStencil, false);
+    if (originalViewport != nullptr)
+    {
+        // The compositor's guest quad was built for the display viewport.
+        // Keep its original half-pixel cancellation when rasterizing it into
+        // the smaller FSR input, otherwise the image shifts by a fraction of a texel.
+        SetDirtyValue(g_dirtyStates.sharedConstants, g_sharedConstants.halfPixelOffsetX, 1.0f / originalViewport->width);
+        SetDirtyValue(g_dirtyStates.sharedConstants, g_sharedConstants.halfPixelOffsetY, -1.0f / originalViewport->height);
+    }
     FlushViewport();
 
     auto& commandList = g_commandLists[g_frame];
@@ -4906,6 +4985,130 @@ static void UnsetInstancingStream()
     }
 }
 
+static void PrepareFsrSurface(std::unique_ptr<GuestSurface>& surface, uint32_t width, uint32_t height)
+{
+    if (surface == nullptr)
+    {
+        surface = std::make_unique<GuestSurface>(ResourceType::RenderTarget);
+        surface->descriptorIndex = g_textureDescriptorAllocator.allocate();
+        surface->format = BACKBUFFER_FORMAT;
+    }
+    if (surface->width == width && surface->height == height)
+        return;
+
+    // g_frame's fence was waited on before BeginCommandList. Other frames use
+    // different surfaces, so no global GPU stall is needed on resolution changes.
+    surface->framebuffers.clear();
+    surface->textureHolder = g_device->createTexture(RenderTextureDesc::Texture2D(
+        width, height, 1, BACKBUFFER_FORMAT, RenderTextureFlag::RENDER_TARGET));
+    surface->texture = surface->textureHolder.get();
+    surface->width = width;
+    surface->height = height;
+    surface->layout = RenderTextureLayout::UNKNOWN;
+    g_textureDescriptorSet->setTexture(surface->descriptorIndex, surface->texture, RenderTextureLayout::SHADER_READ);
+}
+
+template<typename Draw>
+static void DrawWithSceneUpscaling(bool fullscreenPrimitive, Draw&& draw)
+{
+    if (!Config::FSR || !fullscreenPrimitive)
+    {
+        draw(nullptr);
+        return;
+    }
+    const auto shader = g_pipelineState.pixelShader;
+    const auto source = g_textures[0];
+    const auto hash = shader != nullptr && shader->shaderCacheEntry != nullptr ? shader->shaderCacheEntry->hash : 0;
+    // Only these guest compositors copy the finished scene to the display.
+    // Never upscale Present(): guest HUD, movies and native UI are already mixed
+    // into the backbuffer there. Unknown/modded compositors keep the original path.
+    const bool sceneComposite = hash == 0x6C50210CBDA8A23Aull /* FxCopyColor */ ||
+        hash == 0x92940FDD115733E1ull /* FxColorCorrection */;
+    const bool fullViewport = g_viewport.x == 0 && g_viewport.y == 0 &&
+        g_viewport.width == g_backBuffer->width && g_viewport.height == g_backBuffer->height;
+    const bool fullScissor = !g_scissorTestEnable || (g_scissorRect.left <= 0 && g_scissorRect.top <= 0 &&
+        g_scissorRect.right >= int32_t(g_backBuffer->width) && g_scissorRect.bottom >= int32_t(g_backBuffer->height));
+    const float resolutionScale = Config::ResolutionScale;
+    const bool sceneSize = source != nullptr && std::isfinite(resolutionScale) && resolutionScale > 0 && resolutionScale < 1 &&
+        source->width == uint32_t(round(g_backBuffer->width * Config::ResolutionScale)) &&
+        source->height == uint32_t(round(g_backBuffer->height * Config::ResolutionScale)) &&
+        source->width > 0 && source->height > 0 &&
+        source->width < g_backBuffer->width && source->height < g_backBuffer->height;
+    if (!sceneComposite || !sceneSize || !fullViewport || !fullScissor ||
+        !g_swapChainValid || g_renderTarget != g_backBuffer ||
+        g_pipelineState.alphaBlendEnable || g_pipelineState.zEnable ||
+        g_pipelineState.colorWriteEnable != uint32_t(RenderColorWriteEnable::ALL) ||
+        (g_pipelineState.specConstants & (SPEC_CONSTANT_ALPHA_TEST | SPEC_CONSTANT_ALPHA_TO_COVERAGE)) != 0)
+    {
+        draw(nullptr);
+        return;
+    }
+
+    auto& frame = g_fsrFrames[g_frame];
+    PrepareFsrSurface(frame.scene, source->width, source->height);
+    const float configuredSharpness = Config::FSRSharpness;
+    const float sharpness = std::isfinite(configuredSharpness) ? std::clamp(configuredSharpness, 0.0f, 1.0f) : 0.2f;
+    if (sharpness > 0)
+        PrepareFsrSurface(frame.easu, g_backBuffer->width, g_backBuffer->height);
+
+    const auto savedViewport = g_viewport;
+    // Run the game's final color conversion at scene resolution first. This
+    // preserves its tonemapping/correction and avoids feeding bilinear output to EASU.
+    g_renderTarget = frame.scene.get();
+    g_viewport.width = float(source->width);
+    g_viewport.height = float(source->height);
+    g_dirtyStates.renderTargetAndDepthStencil = true;
+    g_dirtyStates.viewport = true;
+    g_dirtyStates.scissorRect = true;
+    draw(&savedViewport);
+
+    auto& commandList = g_commandLists[g_frame];
+    commandList->setGraphicsPipelineLayout(g_pipelineLayout.get());
+    commandList->setGraphicsDescriptorSet(g_textureDescriptorSet.get(), 0);
+    commandList->setGraphicsDescriptorSet(g_textureDescriptorSet.get(), 1);
+    commandList->setGraphicsDescriptorSet(g_textureDescriptorSet.get(), 2);
+    commandList->setGraphicsDescriptorSet(g_samplerDescriptorSet.get(), 3);
+
+    auto runPass = [&](GuestSurface* input, GuestSurface* output, RenderPipeline* pipeline)
+    {
+        AddBarrier(input, RenderTextureLayout::SHADER_READ);
+        AddBarrier(output, RenderTextureLayout::COLOR_WRITE);
+        FlushBarriers();
+        g_dirtyStates.renderTargetAndDepthStencil = true;
+        SetFramebuffer(output, nullptr, false);
+        commandList->setViewports(RenderViewport(0.0f, 0.0f, float(output->width), float(output->height)));
+        commandList->setScissors(RenderRect(0, 0, output->width, output->height));
+        const FsrConstants constants = { input->descriptorIndex, g_fsrSamplerIndex,
+            input->width, input->height, output->width, output->height, sharpness };
+        auto allocation = g_uploadAllocators[g_frame].allocate<false>(&constants, sizeof(constants), 0x100);
+        SetRootDescriptor(allocation, 2);
+        commandList->setPipeline(pipeline);
+        commandList->drawInstanced(3, 1, 0, 0);
+    };
+
+    // AMD's half RCAS uses signed 16-bit texel coordinates with +/-1 neighbors.
+    // Keep very large surfaces on the full-precision path to avoid wraparound.
+    const bool useFp16 = g_fsrEasuFp16Pipeline && g_fsrRcasFp16Pipeline &&
+        g_backBuffer->width < 32768 && g_backBuffer->height < 32768;
+    runPass(frame.scene.get(), sharpness > 0 ? frame.easu.get() : g_backBuffer,
+        useFp16 ? g_fsrEasuFp16Pipeline.get() : g_fsrEasuPipeline.get());
+    if (sharpness > 0)
+        runPass(frame.easu.get(), g_backBuffer, useFp16 ? g_fsrRcasFp16Pipeline.get() : g_fsrRcasPipeline.get());
+
+    g_renderTarget = g_backBuffer;
+    g_viewport = savedViewport;
+    g_dirtyStates = DirtyStates(true);
+
+    static bool logged = false;
+    if (!logged)
+    {
+        LOGF("FSR 1 active: {}x{} -> {}x{}, sharpness {} (scene only, {})",
+            source->width, source->height, g_backBuffer->width, g_backBuffer->height, sharpness,
+            useFp16 ? "FP16" : "FP32");
+        logged = true;
+    }
+}
+
 static void DrawPrimitive(GuestDevice* device, uint32_t primitiveType, uint32_t startVertex, uint32_t primitiveCount) 
 {
     LocalRenderCommandQueue queue;
@@ -4938,14 +5141,15 @@ static void ProcDrawPrimitive(const RenderCommand& cmd)
         UnsetInstancingStream();
     }
 
-    FlushRenderStateForRenderThread();
-
-    auto& commandList = g_commandLists[g_frame];
-
-    if (indexCount > 0)
-        commandList->drawIndexedInstanced(indexCount, args.primitiveCount / indexCount, 0, 0, 0);
-    else
-        commandList->drawInstanced(args.primitiveCount, 1, args.startVertex, 0);
+    DrawWithSceneUpscaling(indexCount == 0 && (args.primitiveCount == 3 || args.primitiveCount == 4 || args.primitiveCount == 6), [&](const RenderViewport* originalViewport)
+    {
+        FlushRenderStateForRenderThread(originalViewport);
+        auto& commandList = g_commandLists[g_frame];
+        if (indexCount > 0)
+            commandList->drawIndexedInstanced(indexCount, args.primitiveCount / indexCount, 0, 0, 0);
+        else
+            commandList->drawInstanced(args.primitiveCount, 1, args.startVertex, 0);
+    });
 }
 
 static void DrawIndexedPrimitive(GuestDevice* device, uint32_t primitiveType, int32_t baseVertexIndex, uint32_t startIndex, uint32_t primCount)
@@ -4972,9 +5176,11 @@ static void ProcDrawIndexedPrimitive(const RenderCommand& cmd)
         UnsetInstancingStream();
 
     SetPrimitiveType(args.primitiveType);
-    FlushRenderStateForRenderThread();
-
-    g_commandLists[g_frame]->drawIndexedInstanced(args.primCount, 1, args.startIndex, args.baseVertexIndex, 0);
+    DrawWithSceneUpscaling(indexCount == 0 && args.primCount == 6, [&](const RenderViewport* originalViewport)
+    {
+        FlushRenderStateForRenderThread(originalViewport);
+        g_commandLists[g_frame]->drawIndexedInstanced(args.primCount, 1, args.startIndex, args.baseVertexIndex, 0);
+    });
 }
 
 static void DrawPrimitiveUP(GuestDevice* device, uint32_t primitiveType, uint32_t primitiveCount, void* vertexStreamZeroData, uint32_t vertexStreamZeroStride)
@@ -5027,12 +5233,14 @@ static void ProcDrawPrimitiveUP(const RenderCommand& cmd)
             args.csdFilterState == CsdFilterState::On ? g_csdFilterShader.get() : g_csdShader);
     }
 
-    FlushRenderStateForRenderThread();
-
-    if (indexCount != 0)
-        g_commandLists[g_frame]->drawIndexedInstanced(indexCount, 1, 0, 0, 0);
-    else
-        g_commandLists[g_frame]->drawInstanced(args.primitiveCount, 1, 0, 0);
+    DrawWithSceneUpscaling(args.primitiveCount == 3 || args.primitiveCount == 4 || args.primitiveCount == 6, [&](const RenderViewport* originalViewport)
+    {
+        FlushRenderStateForRenderThread(originalViewport);
+        if (indexCount != 0)
+            g_commandLists[g_frame]->drawIndexedInstanced(indexCount, 1, 0, 0, 0);
+        else
+            g_commandLists[g_frame]->drawInstanced(args.primitiveCount, 1, 0, 0);
+    });
 }
 
 static const char* ConvertDeclUsage(uint32_t usage)

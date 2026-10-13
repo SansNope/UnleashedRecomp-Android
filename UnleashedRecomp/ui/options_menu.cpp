@@ -1290,6 +1290,8 @@ static void DrawConfigOptions()
 
             DrawConfigOption(rowCount++, yOffset, &Config::AspectRatio, true);
             DrawConfigOption(rowCount++, yOffset, &Config::ResolutionScale, true, nullptr, 0.25f, 1.0f, 2.0f);
+            DrawConfigOption(rowCount++, yOffset, &Config::FSR, true);
+            DrawConfigOption(rowCount++, yOffset, &Config::FSRSharpness, Config::FSR && Config::ResolutionScale < 1.0f);
 #ifndef __ANDROID__
             DrawConfigOption(rowCount++, yOffset, &Config::Fullscreen, true);
             DrawConfigOption(rowCount++, yOffset, &Config::VSync, true);

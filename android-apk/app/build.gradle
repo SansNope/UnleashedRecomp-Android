@@ -21,7 +21,7 @@ android {
         minSdkVersion 29
         targetSdkVersion 34
         versionCode 22
-        versionName "0.6.1"
+        versionName (project.findProperty("unleashedVersionName") ?: "0.6.1")
         externalNativeBuild {
             ndkBuild {
                 arguments "APP_PLATFORM=android-29"
